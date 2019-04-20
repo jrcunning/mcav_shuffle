@@ -1,0 +1,74 @@
+# Add tagseq scripts in this repository to PATH
+export PATH="$PATH:$PWD/code/tagseq"
+
+# Change directory to tagseq raw data
+cd data/tagseq/raw
+
+# Expand raq tagseq data fastq.gz files to fastq
+gunzip -k *.gz
+
+# Move fastq files to intermediate directory for processing
+mv *.fastq ../intermediate
+
+# Change directory to processed tagseq data
+cd ../intermediate
+
+# Concatenate reads from samples split across multiple files from different lanes
+ngs_concat.pl '^' '(.+)_S'
+
+# Delete all original .fastq files (no longer needed after concatenation to new .fq files)
+rm *.fastq
+
+## creating and launching the cleaning process for all files in the same time:
+tagseq_trim_launch.pl '\.fq$' > clean
+
+## now execute all commands written to file 'clean', preferably in parallel (see Note in the beginning of this walkthrough)
+parallel :::: clean
+
+# Change directory to mcav genome
+cd ../../genome
+
+## Format reference genome:
+bowtie2-build Mcavernosa.maker.transcripts.fasta Mcavernosa.maker.transcripts.fasta
+
+# Change directory to intermediate data folder
+cd ../tagseq/intermediate
+
+## mapping reads to genome
+tagseq_bowtie2map.pl "trim$" ../../genome/Mcavernosa.maker.transcripts.fasta > maps
+
+# execute all the commands in 'maps', record screen output in file called maps.out
+parallel :::: maps &> maps.out
+
+## counting hits per gene:
+samcount_launch_bt2.pl '\.sam$' ../../genome/Mcav_transcript_geneID.txt > sc
+
+# execute all commands in 'sc' file
+parallel :::: sc
+
+## assembling all counts into a single table:
+expression_compiler.pl *.sam.counts > ../processed/counts.txt
+
+
+
+# count raw reads for all samples
+rm rawreads.txt
+parallel wc -l ::: *.fq >> rawreads.txt
+awk '{ print $2, ($1/4) }' rawreads.txt > rawreads2.txt
+
+# count post-QC reads for all samples
+rm postQCreads.txt
+parallel wc -l ::: *.trim >> postQCreads.txt
+awk '{ print $2, ($1/4) }' postQCreads.txt > postQCreads2.txt
+
+# count mapped reads for all samples
+for i in *.sam.counts; do
+    awk '{sum += $2} END {print FILENAME"\t"sum}' $i >> mappedreads.txt
+done
+
+# join all together
+paste <(sort rawreads2.txt) <(sort postQCreads2.txt) <(sort mappedreads.txt) > ../processed/count_totals.txt
+
+# delete all files in the intermediate directory
+rm *
+

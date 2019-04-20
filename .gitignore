@@ -1,0 +1,11 @@
+.DS_Store
+.Rproj.user/
+
+data/tagseq/raw/*
+data/tagseq/intermediate/*
+
+DE_analysis_files
+DE_analysis_cache
+
+code/GO_MWU/*logP.txt
+code/GO_MWU/dissim*
