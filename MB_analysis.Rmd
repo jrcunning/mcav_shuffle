@@ -1,0 +1,33 @@
+---
+title: "microbiome_analysis.Rmd"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(phyloseq)
+library(ggplot2)
+```
+
+```{r}
+# Import OTU table and taxonomy from BIOM
+phy <- import_biom("data/16S/processed/feature-table-taxon.biom")
+
+# Add sample data
+sample_data(phy) <- read.delim("data/16S/sample_metadata.txt", row.names = 1)
+
+# Transform counts to relative abundance
+phy <- transform_sample_counts(phy, function(x) x/sum(x))
+```
+
+```{r}
+plot_bar(phy, fill = "OTU") + 
+  facet_wrap(sym ~ trt, scales = "free") + 
+  theme(legend.position = "none")
+
+plot_bar(phy, fill = "OTU") + 
+  facet_wrap(~ colony, scales = "free") + 
+  theme(legend.position = "none")
+```
+
