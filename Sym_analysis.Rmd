@@ -1,0 +1,73 @@
+---
+title: "Sym_analysis.Rmd"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+# Load libraries
+```{r}
+library(readxl)
+library(steponeR)
+library(tidyverse)
+```
+
+# Load sample metadata
+```{r}
+# Import sample metadata
+sdat <- read_xlsx("data/sample_metadata.xlsx") %>%
+  mutate(sample = paste0(species, colony, ".", core),
+         sym = if_else(trt1 == "c", "C", "D"),     # recode treatment names
+         trt = if_else(trt2 == "h", "heat", "ctrl"),
+         symtrt = interaction(sym, trt),
+         colony = factor(colony)) %>%
+  mutate_if(is.character, as.factor) %>%
+  arrange(sample) %>%                              # order by sample name
+  column_to_rownames(var = "sample")               # set sample name to rownames
+```
+
+# Load symbiont qPCR data
+```{r}
+plates <- list.files(path = "data/symbionts", pattern = "*.csv", full.names = TRUE)
+qpcr <- steponeR(files = plates, delim = ",", 
+                 target.ratios = "D.C",
+                 fluor.norm = list(C = 2, D = 0),
+                 copy.number = list(C = 20, D = 1),
+                 ploidy = list(C = 1, D = 1),
+                 extract = list(C = 1, D = 1))
+```
+
+# Calculate proportion *Durusdinium* in each sample
+```{r}
+qpcr <- qpcr$result %>%
+  filter(!Sample.Name %in% c("NTC", "+")) %>%             # filter out positive and negative controls
+  separate("Sample.Name", into = c("colony", "core"))
+
+qpcr <- qpcr %>%
+  mutate(propD = case_when(
+    (C.reps == 2 & D.reps < 2) ~ 0,
+    (D.reps == 2 & C.reps < 2) ~ 1,
+    (D.reps < 2  & C.reps < 2) ~ NaN,
+    TRUE ~ D.C / (D.C + 1)))
+
+df <- full_join(sdat, qpcr) %>%
+  filter(!is.na(symtrt)) %>%
+  select(colony, core, sym, trt, C.CT.mean, C.CT.sd, C.reps, D.CT.mean, D.CT.sd, D.reps, propD) %>%
+  arrange(sym, trt)
+
+df %>%
+  dplyr::group_by(sym) %>%
+  dplyr::summarize(mean_propD = mean(propD, na.rm = T)) %>%
+  knitr::kable()
+```
+
+# Plot results
+```{r}
+ggplot(df, aes(x = sym, y = propD)) +
+  geom_boxplot() +
+  geom_point() +
+  ylim(0, 1)
+```
+
