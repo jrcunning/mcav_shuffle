@@ -1,33 +1,99 @@
 ---
-title: "microbiome_analysis.Rmd"
+title: "Impact of symbiont shuffling and thermal stress on the microbiome of *Montastraea cavernosa*"
 output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 
 library(phyloseq)
-library(ggplot2)
+library(tidyverse)
+library(DESeq2)
+library(pheatmap)
+library(RColorBrewer)
+library(Biostrings)
 ```
 
+# Import data
 ```{r}
 # Import OTU table and taxonomy from BIOM
-phy <- import_biom("data/16S/processed/feature-table-taxon.biom")
+MB <- import_biom("data/16S/processed/feature-table-taxon.biom")
 
 # Add sample data
-sample_data(phy) <- read.delim("data/16S/sample_metadata.txt", row.names = 1)
+sample_data(MB) <- read.delim("data/16S/sample_metadata.txt", row.names = 1)
+sample_data(MB)$colony <- factor(sample_data(MB)$colony)
 
-# Transform counts to relative abundance
-phy <- transform_sample_counts(phy, function(x) x/sum(x))
+# Import representative sequences to look at sequence length
+repset <- readDNAStringSet("data/16S/intermediate/sequences.fasta")
+
+# Get lengths of all sequences
+lengths <- data.frame(otu = names(repset), length = width(repset))
+# Get abundance of all sequences
+abunds <- data.frame(otu = rownames(otu_table(MB)), abund = rowSums(otu_table(MB)))
+# Join sequence length and abundance data
+df <- right_join(lengths, abunds)
+
+# Plot total abundance of reads of different lengths
+ggplot(df, aes(x = length, weights = abund)) + 
+  geom_bar() +
+  geom_text(stat = "bin", aes(label = ..count..), color = "red", vjust = -0.1) +
+  labs(x = "Read length", y = "Number of reads")
+
+# Calculate relative abundance of reads under 210bp
+df %>% summarise(total = sum(abund),
+                 under210 = sum(abund[length < 210]),
+                 fracunder210 = under210/total)
 ```
 
+The target amplicon length is 292bp, and only 5% of reads are at the target length. 95% of the reads are ~208bp, and BLASTing a few of these shows they are likely coral rDNA. These will have to be filtered out, and we'll see if the remaining 5% of actual Bacterial reads can tell us anything.
+
+# Filter and transform
 ```{r}
-plot_bar(phy, fill = "OTU") + 
-  facet_wrap(sym ~ trt, scales = "free") + 
-  theme(legend.position = "none")
+# Filter out the short reads (these are probably host contamination)
+over210 <- as.character(filter(lengths, length > 210)$otu)
+MB <- subset_taxa(MB, taxa_names(MB) %in% over210)
 
-plot_bar(phy, fill = "OTU") + 
-  facet_wrap(~ colony, scales = "free") + 
-  theme(legend.position = "none")
+# Look at remaining reads per sample
+qplot(sample_sums(MB)) +
+  labs(x = "Reads per sample", y = "Number of samples")
+
+# Remove samples with zero reads
+MB <- prune_samples(sample_sums(MB) != 0, MB)
+
+# Remove low abundance taxa
+MBf <- filter_taxa(MB, function(x) max(x) >=2, TRUE)  # Only keep if observed >= 2x in at least 1 sample
+# leaves 250 taxa remaining
+#MBf <- filter_taxa(MB, function(x) sum(x > 3) > 3, TRUE)  # Only keep if observed >= 3x in at least 3 samples
+# leaves 19 taxa remaining
+
+# Transform to relative abundances
+MBp <- transform_sample_counts(MB, function(x) x/sum(x))  #x/sum(x)
+MBfp <- transform_sample_counts(MBf, function(x) x/sum(x))
+
 ```
+
+After filtering out the coral rDNA reads, we only have a few hundred reads left per sample. This is likely too few to find significant results.
+
+# Barplot
+```{r}
+phyla <- MBfp %>%
+  tax_glom(taxrank = "Rank2") %>%                       # agglomerate at phylum level
+  psmelt() %>%                                         # Melt to long format
+  arrange(Rank2)                                      # Sort data frame alphabetically by clade
+
+ggplot(phyla, aes(x = Sample, y = Abundance, fill = Rank2)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~ sym:trt, scales = "free") +
+  labs(x = NULL, y = "Relative abundance")
+```
+
+# Plot ordination
+```{r}
+MBphyla <- MBfp %>% tax_glom(taxrank = "Rank2")
+
+MBp.ord <- phyloseq::ordinate(MBphyla, "NMDS", "bray", trace = 0)
+
+plot_ordination(MBphyla, MBp.ord, type="samples", color="colony", shape = "symtrt")
+```
+
 
