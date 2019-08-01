@@ -47,7 +47,7 @@ samcount_launch_bt2.pl '\.sam$' ../../genome/Mcav_transcript_geneID.txt > sc
 parallel :::: sc
 
 ## assembling all counts into a single table:
-expression_compiler.pl *.sam.counts > ../processed/counts.txt
+expression_compiler.pl *.sam.counts > ../processed/counts_newpars.txt
 
 
 
@@ -62,12 +62,13 @@ parallel wc -l ::: *.trim >> postQCreads.txt
 awk '{ print $2, ($1/4) }' postQCreads.txt > postQCreads2.txt
 
 # count mapped reads for all samples
+rm mappedreads.txt
 for i in *.sam.counts; do
     awk '{sum += $2} END {print FILENAME"\t"sum}' $i >> mappedreads.txt
 done
 
 # join all together
-paste <(sort rawreads2.txt) <(sort postQCreads2.txt) <(sort mappedreads.txt) > ../processed/count_totals.txt
+paste <(sort rawreads2.txt) <(sort postQCreads2.txt) <(sort mappedreads.txt) > ../processed/count_totals_newpars.txt
 
 # delete all files in the intermediate directory
 rm *

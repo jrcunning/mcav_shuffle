@@ -48,7 +48,7 @@ while (<INP>) {
 		$tot++;
 		$name2=$1; 
 		if ($seq=~/^($lead)(.+)/) {	
-			my $start=substr($2,0,30);
+			my $start=substr($2,0,50);
 			my $idtag=$1.$start;
 			if (!$seen{$idtag} and $idtag!~/N/) {
 				$seen{$idtag}=1;
