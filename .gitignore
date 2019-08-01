@@ -3,9 +3,20 @@
 
 data/tagseq/raw/*
 data/tagseq/intermediate/*
+data/16S/raw/*
+data/16S/intermediate/*
+
+data/SILVA_132_QIIME_release
 
 DE_analysis_files
 DE_analysis_cache
 
 code/GO_MWU/*logP.txt
 code/GO_MWU/dissim*
+.Rproj.user
+
+*.pptx
+*_files
+*_cache
+data/photos
+
