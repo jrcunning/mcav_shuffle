@@ -1,0 +1,100 @@
+---
+title: "PAM analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(IPAM2R)   # devtools::install_github(repo = "jrcunning/IPAM2R")
+library(lme4)
+library(lsmeans)
+library(tidyverse)
+library(readxl)
+
+theme_custom <- function() {
+  theme_bw(base_size = 10, base_family = "Arial") %+replace%
+    theme(
+      panel.grid.major = element_blank(), 
+      panel.grid.minor = element_blank(), 
+      panel.background = element_blank(),
+      panel.border = element_rect(color = "black", fill = NA),
+      legend.background = element_rect(fill = NA, colour = NA)#,
+      #axis.text.x = element_text(angle=45, hjust=1, vjust = 1)
+    )
+}
+```
+
+```{r}
+# Import sample metadata
+sdat <- read_xlsx("data/sample_metadata.xlsx") %>%
+  mutate(sample = paste0(species, colony, ".", core),
+         sym = if_else(trt1 == "c", "C", "D"),     # recode treatment names
+         trt = if_else(trt2 == "h", "heat", "ctrl"),
+         symtrt = interaction(sym, trt),
+         colony = factor(colony)) %>%
+  mutate_if(is.character, as.factor) %>%
+  arrange(sample) %>%                              # order by sample name
+  column_to_rownames(var = "sample")               # set sample name to rownames
+```
+
+```{r}
+pam <- import_ipam("data/PAM")
+
+# add treatment info
+pam <- pam %>% 
+  separate(ID, into = c("colony", "core"))
+
+pam <- right_join(sdat, pam)
+```
+
+```{r}
+ggplot(pam, aes(x = symtrt, y = Y)) +
+  geom_boxplot() + 
+  geom_point(aes(color = tank))
+```
+
+```{r}
+pam <- filter(pam, colony %in% c(20, 22, 26))
+
+# remove core that didn't shuffle
+pam <- filter(pam, !(colony == 22 & core == 12))
+
+
+mod <- lmer(Y ~ sym * trt + (1|colony), data = pam)
+mod2 <- lm(Y ~ sym * trt, data = pam)
+
+lsm <- lsmeans(mod, specs = c("trt", "sym"))
+summary(lsm)
+
+rbind(pairs(lsm, by = "sym"), adjust = "none")
+# No change from ctrl to heat in either sym
+
+contrast(lsm, interaction = "pairwise", by = "trt")
+#  Change from ctrl to heat not diff by sym
+
+
+pamfig <- data.frame(summary(lsm)) %>%
+  mutate(trt = recode(trt, ctrl = "Control", heat = "Heated")) %>%
+  ggplot(aes(x = trt, y = lsmean, group = sym, shape = sym)) +
+  geom_errorbar(aes(ymin = lsmean - SE, ymax = lsmean + SE),
+                position = position_dodge(width = 0.2), lwd = 0.15, width = 0.25) +
+  geom_line(position = position_dodge(width = 0.2), lwd = 0.15) +
+  geom_point(position = position_dodge(width = 0.2), size = 3, fill = "white") +
+    scale_shape_manual(values = c(21, 24)) +
+  labs(y = "Fv/Fm", x = "") +
+  theme_custom() +
+  theme(legend.position = c(0.8, 0.9), legend.title = element_blank())
+
+pamfig
+
+save(pamfig, file = "output/pamfig.RData")
+
+data.frame(summary(lsm)) %>%
+  select(sym, trt, lsmean) %>%
+  spread(trt, lsmean) %>%
+  mutate(diff = -(1 - (heat / ctrl)))
+```
+

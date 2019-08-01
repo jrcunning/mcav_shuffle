@@ -12,6 +12,33 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 library(readxl)
 library(steponeR)
 library(tidyverse)
+library(lme4)
+library(lsmeans)
+
+theme_custom <- function() {
+  theme_bw(base_size = 10, base_family = "Arial") %+replace%
+    theme(
+      panel.grid.major = element_blank(), 
+      panel.grid.minor = element_blank(), 
+      panel.background = element_blank(),
+      panel.border = element_rect(color = "black", fill = NA),
+      legend.background = element_rect(fill = NA, colour = NA)#,
+      #axis.text.x = element_text(angle=0, hjust=1, vjust = 1)
+    )
+}
+## ggplot labeller
+trt1names <- c(
+  c = "Ambient temperature controls",
+  b = "Bleached and recovered"
+)
+shuffnames <- c(
+  `TRUE` = "Shufflers",
+  `FALSE` = "Non-shufflers"
+)
+global_labeller <- labeller(
+  trt1 = trt1names,
+  shuff = shuffnames
+)
 ```
 
 # Load sample metadata
@@ -24,19 +51,20 @@ sdat <- read_xlsx("data/sample_metadata.xlsx") %>%
          symtrt = interaction(sym, trt),
          colony = factor(colony)) %>%
   mutate_if(is.character, as.factor) %>%
+  filter(date_sampled == "2017-10-28") %>%          # only samples from end of hs experiment
   arrange(sample) %>%                              # order by sample name
-  column_to_rownames(var = "sample")               # set sample name to rownames
+  column_to_rownames(var = "sample")              # set sample name to rownames
 ```
 
 # Load symbiont qPCR data
 ```{r}
 plates <- list.files(path = "data/symbionts", pattern = "*.csv", full.names = TRUE)
 qpcr <- steponeR(files = plates, delim = ",", 
-                 target.ratios = "D.C",
-                 fluor.norm = list(C = 2, D = 0),
-                 copy.number = list(C = 20, D = 1),
-                 ploidy = list(C = 1, D = 1),
-                 extract = list(C = 1, D = 1))
+                 target.ratios = c("D.C", "C.Mcav", "D.Mcav"),
+                 fluor.norm = list(C = 1.67, D = 0, Mcav = -2),
+                 copy.number = list(C = 50, D = 3, Mcav = 1),
+                 ploidy = list(C = 1, D = 1, Mcav = 2),
+                 extract = list(C = 0.813, D = 0.813, Mcav = 0.982))
 ```
 
 # Calculate proportion *Durusdinium* in each sample
@@ -46,6 +74,8 @@ qpcr <- qpcr$result %>%
   separate("Sample.Name", into = c("colony", "core"))
 
 qpcr <- qpcr %>%
+  rowwise() %>% 
+  mutate(totSH = rowSums(.[, c("C.Mcav", "D.Mcav")], na.rm = TRUE)) %>%
   mutate(propD = case_when(
     (C.reps == 2 & D.reps < 2) ~ 0,
     (D.reps == 2 & C.reps < 2) ~ 1,
@@ -53,21 +83,167 @@ qpcr <- qpcr %>%
     TRUE ~ D.C / (D.C + 1)))
 
 df <- full_join(sdat, qpcr) %>%
-  filter(!is.na(symtrt)) %>%
-  select(colony, core, sym, trt, C.CT.mean, C.CT.sd, C.reps, D.CT.mean, D.CT.sd, D.reps, propD) %>%
-  arrange(sym, trt)
+  mutate(shuff = colony %in% c(20, 22, 26)) %>%
+  select(colony, core, sym, trt1, shuff, trt,
+         C.CT.mean, C.CT.sd, C.reps, D.CT.mean, D.CT.sd, D.reps, 
+         totSH, propD) %>%
+  arrange(sym, trt) %>%
+  filter(!is.na(trt1))
 
 df %>%
-  dplyr::group_by(sym) %>%
+  dplyr::group_by(trt1, colony %in% c(20, 22, 26)) %>%
   dplyr::summarize(mean_propD = mean(propD, na.rm = T)) %>%
   knitr::kable()
+
+df %>%
+  filter(colony %in% c(20, 22, 26)) %>%
+  arrange(trt1, propD)
+#22-12
+
+# Look at duplicates/reruns
+dups <- df %>% dplyr::count(cc = interaction(colony, core)) %>% filter(n >= 2)
+df %>% filter(interaction(colony, core) %in% dups$cc)
+
+# Choose run with lowest mean sd for C and D
+selected <- df %>%
+  filter(interaction(colony, core) %in% dups$cc) %>%
+  rowwise() %>%
+  mutate(meanctsd = mean(c(C.CT.sd, D.CT.sd), na.rm = T)) %>%
+  group_by(interaction(colony, core)) %>%
+  slice(which.min(meanctsd))
+
+# Keep selected with other rows
+df <- df %>%
+  filter(!interaction(colony, core) %in% dups$cc) %>%
+  bind_rows(selected)
+
+df %>%
+  filter(colony %in% c(20, 22, 26)) %>%
+  arrange(trt1, propD)
+
+
+# Plot with names
+ggplot(df, aes(x = trt1, y = propD, color = trt1), labeller = global_labeller) +
+  facet_wrap(~ shuff, labeller = global_labeller) +
+  geom_jitter(width = 0.125, alpha = 0.5, size = 2.5) +
+  scale_color_manual(values = c("skyblue", "orange")) +
+  labs(x = "", y = "Proportion Durusdinium") +
+  theme_custom() +
+  geom_text(aes(label = interaction(colony, core))) +
+  theme(legend.position = 0)
 ```
 
-# Plot results
+22-12 should have shuffled and did NOT
+28-40 shuffled when it should NOT
 ```{r}
-ggplot(df, aes(x = sym, y = propD)) +
+df <- df %>%
+  filter(!(colony == 22 & core == 12),
+         !(colony == 28 & core == 40))
+```
+
+
+# Plot results
+
+## Proportion D
+```{r}
+# Corals that were maintained at 26°C throughout the study
+df %>%
+  filter(trt1 == "c", trt == "ctrl") %>%
+  summarise(meanC = mean((1 - propD), na.rm = TRUE),
+            sd = sd(1 - propD, na.rm = TRUE))
+
+# Corals that shuffled to D after initial bleaching (colonies 20, 22, 26, trt1=="b")
+df %>%
+  filter(colony %in% c(20, 22, 26), trt1 == "b") %>%
+  summarise(meanD = mean(propD),
+            sd = sd(propD))
+
+# Corals that did NOT SHUFFLE to D after initial bleaching (colonies 20, 22, 26, trt1=="b")
+df %>%
+  filter(!colony %in% c(20, 22, 26), trt1 == "b") %>%
+  summarise(meanC = mean(1 - propD),
+            sd = sd(1 - propD))
+
+df1 <- df %>%
+  mutate(trt1 = recode(trt1, c = "Control", b = "Manipulated"),
+         trt1 = str_wrap(trt1, width = 10),
+         trt1 = factor(trt1, levels = c("Control", "Manipulated")),
+         trt1 = relevel(trt1, ref = "Control"))
+df1$trt1 <- relevel(df1$trt1, ref = "Control")
+
+propdfig <- ggplot(df1, aes(x = trt1, y = propD, color = trt1), labeller = global_labeller) +
+  facet_wrap(~ shuff, labeller = global_labeller) +
+  #geom_violin() +
+  geom_jitter(width = 0.25, alpha = 0.5, size = 2.5) +
+  scale_color_manual(values = c("skyblue", "orange")) +
+  labs(x = "", y = "Proportion Durusdinium") +
+  theme_custom() +
+  #geom_text(aes(label = interaction(colony, core))) +
+  theme(legend.position = 0)
+
+
+
+
+propdfig <- df1 %>% 
+  filter(shuff) %>%
+  ggplot(aes(x = trt1, y = propD, shape = trt1), labeller = global_labeller) +
+  geom_jitter(width = 0.25, alpha = 0.5, size = 2.5) +
+  scale_shape_manual(values = c(21, 24)) +
+  labs(x = "", y = "Proportion Durusdinium") +
+  theme_custom() +
+  theme(legend.position = 0)
+
+propdfig
+
+save(propdfig, file = "output/propdfig.RData")
+```
+
+
+## Total S/H ratio -- for only colonies in hs exp
+```{r}
+df1 %>%
+  ggplot(aes(x = interaction(sym, trt), y = log(totSH))) +
   geom_boxplot() +
-  geom_point() +
-  ylim(0, 1)
+  geom_point(aes(color = colony))
+
+dff <- df1 %>%
+  filter(colony %in% c(20, 22, 26)) %>%
+  filter(totSH != 0)
+
+mod <- lmer(log10(totSH) ~ sym * trt + (1|colony), data = dff)
+
+lsm <- lsmeans(mod, specs = c("sym", "trt"))
+
+contrast(lsm, "pairwise")
+contrast(lsm, interaction = "pairwise")
+
+totshfig <- data.frame(summary(lsm)) %>%
+  mutate(trt = recode(trt, ctrl = "Control", heat = "Heated")) %>%
+  ggplot(aes(x = trt, y = lsmean, group = sym, shape = sym)) +
+  geom_errorbar(aes(ymin = lsmean - SE, ymax = lsmean + SE),
+                position = position_dodge(width = 0.2), lwd = 0.15, width = 0.25) +
+  geom_line(position = position_dodge(width = 0.2), lwd = 0.15) +
+  geom_point(position = position_dodge(width = 0.2), size = 3, fill = "white") +
+  scale_shape_manual(values = c(21, 24)) +
+  labs(y = "log10(S/H ratio)", x = "") +
+  theme_custom() +
+  theme(legend.position = c(0.8, 0.9), legend.title = element_blank())
+totshfig
+
+save(totshfig, file = "output/totshfig.RData")
+
+data.frame(summary(lsm, type = "response")) %>%
+  select(sym, trt, response) %>%
+  spread(trt, response) %>%
+  mutate(diff = -(1 - (heat / ctrl)))
+```
+
+# Combined fig
+```{r}
+load("output/pamfig.RData")
+fig1 <- cowplot::plot_grid(propdfig, pamfig, totshfig, nrow = 1, rel_widths = c(0.33, 0.33, 0.33), labels = "AUTO")
+ggsave(filename = "figures/fig1.png", fig1, width = 169, height = 84.5, units = "mm")
+
+fig1
 ```
 
