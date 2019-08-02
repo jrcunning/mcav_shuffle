@@ -127,7 +127,7 @@ ggplot(df, aes(x = trt1, y = propD, color = trt1), labeller = global_labeller) +
   facet_wrap(~ shuff, labeller = global_labeller) +
   geom_jitter(width = 0.125, alpha = 0.5, size = 2.5) +
   scale_color_manual(values = c("skyblue", "orange")) +
-  labs(x = "", y = "Proportion Durusdinium") +
+  labs(x = "", y = expression(paste("Proportion ", italic("Durusdinium")))) +
   theme_custom() +
   geom_text(aes(label = interaction(colony, core))) +
   theme(legend.position = 0)
@@ -146,23 +146,24 @@ df <- df %>%
 
 ## Proportion D
 ```{r}
-# Corals that were maintained at 26°C throughout the study
-df %>%
-  filter(trt1 == "c", trt == "ctrl") %>%
-  summarise(meanC = mean((1 - propD), na.rm = TRUE),
-            sd = sd(1 - propD, na.rm = TRUE))
+# Calculate means and confidence intervals of proportion Durusdinium for all groups of interest
+dd <- tibble(data = list(
+  control.3 = filter(df, colony %in% c(20, 22, 26), trt1 == "c"),
+  bl.recov.3 = filter(df, colony %in% c(20, 22, 26), trt1 == "b"),
+  bl.recov.others = filter(df, !colony %in% c(20, 22, 26))
+)) %>%
+  mutate(grp = names(data), n = map_dbl(data, ~ nrow(.)))
 
-# Corals that shuffled to D after initial bleaching (colonies 20, 22, 26, trt1=="b")
-df %>%
-  filter(colony %in% c(20, 22, 26), trt1 == "b") %>%
-  summarise(meanD = mean(propD),
-            sd = sd(propD))
+dd <- dd %>%
+  mutate(mod = map(data, ~ glm(propD ~ 1, family = "quasibinomial", data = .)),      # Fit quasibinomial GLM
+         lsm = map( mod, ~ lsmeans(., specs = "1", type = "response")),              # Get fitted response and 95 CI
+         res = map( lsm, ~ data.frame(summary(.))))                                  # Extract results
 
-# Corals that did NOT SHUFFLE to D after initial bleaching (colonies 20, 22, 26, trt1=="b")
-df %>%
-  filter(!colony %in% c(20, 22, 26), trt1 == "b") %>%
-  summarise(meanC = mean(1 - propD),
-            sd = sd(1 - propD))
+dd %>% unnest(res) %>%
+  select(grp, n, prob, asymp.LCL, asymp.UCL) %>%
+  mutate_at(3:5, scales::percent)                                                    # Convert to percentages
+
+
 
 df1 <- df %>%
   mutate(trt1 = recode(trt1, c = "Control", b = "Manipulated"),
@@ -171,25 +172,27 @@ df1 <- df %>%
          trt1 = relevel(trt1, ref = "Control"))
 df1$trt1 <- relevel(df1$trt1, ref = "Control")
 
+
+# Non-shuffling and shuffling colonies.... could be a supplemental figure
 propdfig <- ggplot(df1, aes(x = trt1, y = propD, color = trt1), labeller = global_labeller) +
   facet_wrap(~ shuff, labeller = global_labeller) +
   #geom_violin() +
   geom_jitter(width = 0.25, alpha = 0.5, size = 2.5) +
   scale_color_manual(values = c("skyblue", "orange")) +
-  labs(x = "", y = "Proportion Durusdinium") +
+  labs(x = "", y = expression(paste("Proportion ", italic("Durusdinium")))) +
   theme_custom() +
   #geom_text(aes(label = interaction(colony, core))) +
   theme(legend.position = 0)
 
+propdfig
 
-
-
+# Only shuffling colonies --- panel A in Figure 1
 propdfig <- df1 %>% 
   filter(shuff) %>%
   ggplot(aes(x = trt1, y = propD, shape = trt1), labeller = global_labeller) +
   geom_jitter(width = 0.25, alpha = 0.5, size = 2.5) +
   scale_shape_manual(values = c(21, 24)) +
-  labs(x = "", y = "Proportion Durusdinium") +
+  labs(x = "", y = expression(paste("Proportion ", italic("Durusdinium")))) +
   theme_custom() +
   theme(legend.position = 0)
 
@@ -214,8 +217,15 @@ mod <- lmer(log10(totSH) ~ sym * trt + (1|colony), data = dff)
 
 lsm <- lsmeans(mod, specs = c("sym", "trt"))
 
-contrast(lsm, "pairwise")
+rbind(contrast(lsm, "pairwise"))[c(1,2,5)]
 contrast(lsm, interaction = "pairwise")
+
+mod2 <- lmer(log10(totSH) ~ sym + trt + (1|colony), data = dff)
+
+lsm <- lsmeans(mod2, specs = c("sym"))
+contrast(lsm, "pairwise")
+lsm <- lsmeans(mod2, specs = c("trt"))
+contrast(lsm, "pairwise")
 
 totshfig <- data.frame(summary(lsm)) %>%
   mutate(trt = recode(trt, ctrl = "Control", heat = "Heated")) %>%

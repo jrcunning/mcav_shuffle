@@ -84,7 +84,7 @@ pamfig <- data.frame(summary(lsm)) %>%
   geom_line(position = position_dodge(width = 0.2), lwd = 0.15) +
   geom_point(position = position_dodge(width = 0.2), size = 3, fill = "white") +
     scale_shape_manual(values = c(21, 24)) +
-  labs(y = "Fv/Fm", x = "") +
+  labs(y = expression(italic("F"[v]*" / F"[m])), x = "") +
   theme_custom() +
   theme(legend.position = c(0.8, 0.9), legend.title = element_blank())
 

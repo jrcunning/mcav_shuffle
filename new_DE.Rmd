@@ -24,6 +24,7 @@ source("code/GO_MWU/gomwu.functions.R")
 library(tidyverse)
 library(KOGMWU)  # install.packages("KOGMWU")
 library(adegenet)
+library(ggpubr)
 
 
 ## ggplot theme
@@ -325,6 +326,8 @@ dp1 <- dapc(t(dat), colData(hs.dds)$group,
 
 #scatter(dp1, bg = "white", legend = TRUE, scree.da = FALSE)
 
+scatter(dp1)
+
 dapc <- tibble(sample = rownames(dp1$ind.coord),
                grp = dp1$grp,
                LD1 = dp1$ind.coord[,1],
@@ -343,15 +346,27 @@ dapc.fig <- ggplot(dapc, aes(shape = factor(grepl("^D", grp)),
   geom_point(aes(x = LD1, y = LD2), size = 0.7, show.legend = FALSE) +
   scale_shape_manual(name = "sym", labels = c("C", "D"), values = c(21, 24)) +
   scale_fill_manual(name = "temp", labels = c("control", "heated"), values = c("black", "white")) +
-  guides(fill = guide_legend(override.aes = list(shape = 21))) +
-  guides(shape = guide_legend(override.aes = list(fill = "black"))) +
+  guides(fill = guide_legend(override.aes = list(shape = 21, size = 2))) +
+  guides(shape = guide_legend(override.aes = list(fill = "black", size = 2))) +
   labs(x = "LD1", y = "LD2") +
-  theme(legend.position = "none") +
-  theme_custom()
+  theme_custom() +
+  theme(legend.position = c(0.25, 0.15)) +
+  theme(plot.margin = margin(t = 0, r = 0.9, unit = "cm")) +
+  theme(legend.spacing.y = unit(0, "cm"),
+        legend.spacing.x = unit(0, "cm")) +
+  theme(legend.box = "horizontal")
 
 dapc.fig
 
-ggsave(filename = "figures/fig3.png", plot = dapc.fig, width = 112, height = 84.5, units = "mm")
+xplot <- ggdensity(dapc, x = "LD1", fill = "grp", lwd = 0.25,
+                   palette = c("black", "white", "black", "white")) +
+  clean_theme() + rremove("legend") + 
+  theme(plot.margin = unit(c(0, 0, 0, 0), "cm"))
+xplot
+
+fig3 <- plot_grid(xplot, NULL, dapc.fig, ncol = 1, align = "hv", rel_heights = c(0.7, -0.28, 2))
+fig3
+ggsave(filename = "figures/fig3.png", plot = fig3, width = 80, height = 80, units = "mm")
 ```
 
 The DAPC shows that despite the significant variability among colonies, the four treatment groups can be discriminated well based on gene expression data. The first discriminant function (x-axis) represents the effect of heat stress in general, with control temperature corals to the left and heated corals to the right. Along this axis, D-control corals are intermediate between C-control corals and heated corals, showing that the presence of D shifts the transcriptional state toward the heat-stressed state. The second discriminant function (y-axis) separates the distinct responses to heat stress that occur in C vs. D corals.
