@@ -1,0 +1,42 @@
+contrast,ontology,delta.rank,name,p.adj
+Cheat.Cctrl,BP,-432,anion transport,0.00392576737026471
+Cheat.Cctrl,BP,-622,sodium ion transport,0.00941096400304676
+Cheat.Cctrl,BP,-713,ammonium transport,0.00941096400304676
+Cheat.Cctrl,BP,440,protein localization to membrane,0.00174777640736525
+Cheat.Cctrl,BP,475,protein targeting to membrane,0.00262376869541717
+Cheat.Cctrl,BP,273,positive regulation of catalytic activity,0.00390453006922616
+Cheat.Cctrl,BP,490,protein-containing complex disassembly,0.00451607300508877
+Cheat.Cctrl,BP,256,mRNA metabolic process,0.0062610829704787
+Cheat.Cctrl,BP,238,intracellular signal transduction,0.00670864883771575
+Cheat.Cctrl,BP,274,regulation of transferase activity,0.00818537500991973
+Cheat.Cctrl,CC,494,cytosolic ribosome,1.34388457999799e-4
+Cheat.Cctrl,CC,392,cytosolic part,4.2383965067434e-4
+Cheat.Cctrl,CC,226,ribonucleoprotein complex,9.42893335316897e-4
+Cheat.Cctrl,CC,353,ribosome,0.00249235814657858
+Cheat.Cctrl,MF,-519,secondary active transmembrane transporter activity,7.2112489737514e-4
+Cheat.Cctrl,MF,-427,anion transmembrane transporter activity,0.00127218994201412
+Cheat.Cctrl,MF,-442,organic anion transmembrane transporter activity,0.0043506479486651
+Cheat.Cctrl,MF,-506,sodium ion transmembrane transporter activity,0.00910396813032967
+Cheat.Cctrl,MF,422,structural constituent of ribosome,7.2112489737514e-4
+Cheat.Cctrl,MF,232,RNA binding,0.00127218994201412
+Dctrl.Cctrl,BP,660,translational initiation,4.35628315806064e-7
+Dctrl.Cctrl,BP,670,protein-containing complex disassembly,1.41507005509936e-6
+Dctrl.Cctrl,BP,696,spindle elongation,1.50097496110344e-5
+Dctrl.Cctrl,BP,486,protein targeting to membrane,7.40737291082688e-4
+Dctrl.Cctrl,BP,428,cellular component disassembly,9.38458886407601e-4
+Dctrl.Cctrl,BP,464,translational elongation,0.00108739493141415
+Dctrl.Cctrl,BP,393,protein localization to membrane,0.00351240909113899
+Dctrl.Cctrl,BP,420,RNA catabolic process,0.0048821249072118
+Dctrl.Cctrl,BP,254,mRNA metabolic process,0.0048821249072118
+Dctrl.Cctrl,CC,622,cytosolic ribosome,5.05452347105008e-8
+Dctrl.Cctrl,CC,425,ribosome,4.63470735923406e-5
+Dctrl.Cctrl,CC,425,cytosolic part,4.63470735923406e-5
+Dctrl.Cctrl,CC,468,large ribosomal subunit,0.00229659553662397
+Dctrl.Cctrl,CC,677,cytosolic small ribosomal subunit,0.00229659553662397
+Dctrl.Cctrl,MF,487,structural constituent of ribosome,1.55249291232193e-5
+Dheat.Dctrl,BP,-544,translational initiation,3.70656557698775e-4
+Dheat.Dctrl,CC,-420,cytosolic ribosome,0.00618050504088103
+Dheat.Dctrl,MF,-396,structural constituent of ribosome,0.00245802325556451
+Dheat.Dctrl,MF,-472,organic anion transmembrane transporter activity,0.00245802325556451
+Dheat.Dctrl,MF,515,molecular adaptor activity,0.00245802325556451
+Dheat.Dctrl,MF,647,signaling adaptor activity,0.00261394508660279

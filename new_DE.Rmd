@@ -26,7 +26,6 @@ library(KOGMWU)  # install.packages("KOGMWU")
 library(adegenet)
 library(ggpubr)
 
-
 ## ggplot theme
 theme_custom <- function() {
   theme_bw(base_size = 10, base_family = "Arial") %+replace%
@@ -48,9 +47,16 @@ colnames <- c(
   `26` = "colony 26"
 )
 
+contrastnames <- c(
+  `Dc.Cc` = expression("D"[C]~"vs."~"C"[C]),
+  `Dh.Dc` = expression("D"[H]~"vs."~"D"[C]),
+  `Ch.Cc` = expression("C"[H]~"vs."~"C"[C])
+)
+
 global_labeller <- labeller(
   colony = colnames,
-  .default = label_both
+  contrast = contrastnames,
+  .default = "label_parsed"
 )
 ```
 
@@ -297,7 +303,9 @@ all %>%
 # Discriminant function including all genes
 vsd2 <- limma::removeBatchEffect(assay(vsd), vsd$colony)
 # use batch-colony-removed vst counts
-dat <- data.frame(vsd2)  
+dat <- data.frame(vsd2) 
+# use regular vst counts
+#dat <- data.frame(assay(vsd))
 
 # How many PCs should be kept?
 # dapc2 <- dapc(t(dat), colData(hs.dds)$group, n.da=4, n.pca=35)
@@ -326,8 +334,6 @@ dp1 <- dapc(t(dat), colData(hs.dds)$group,
 
 #scatter(dp1, bg = "white", legend = TRUE, scree.da = FALSE)
 
-scatter(dp1)
-
 dapc <- tibble(sample = rownames(dp1$ind.coord),
                grp = dp1$grp,
                LD1 = dp1$ind.coord[,1],
@@ -339,7 +345,8 @@ dapc <- dapc %>%
   full_join(dapc)
 
 # Plot with spiders
-dapc.fig <- ggplot(dapc, aes(shape = factor(grepl("^D", grp)), 
+dapc.fig <- 
+  ggplot(dapc, aes(shape = factor(grepl("^D", grp)), 
                              fill = factor(grepl("h", grp)))) +
   geom_segment(mapping = aes(x = LD1, y = LD2, xend = c1, yend = c2), lwd = 0.25, col = "grey") +
   geom_point(aes(x = c1, y = c2), size = 2) +
@@ -350,26 +357,87 @@ dapc.fig <- ggplot(dapc, aes(shape = factor(grepl("^D", grp)),
   guides(shape = guide_legend(override.aes = list(fill = "black", size = 2))) +
   labs(x = "LD1", y = "LD2") +
   theme_custom() +
-  theme(legend.position = c(0.25, 0.15)) +
+  #theme(legend.position = c(0.25, 0.15)) +
   theme(plot.margin = margin(t = 0, r = 0.9, unit = "cm")) +
-  theme(legend.spacing.y = unit(0, "cm"),
-        legend.spacing.x = unit(0, "cm")) +
-  theme(legend.box = "horizontal")
+  #theme(legend.spacing.y = unit(0, "cm"),
+  #      legend.spacing.x = unit(0, "cm")) +
+  #theme(legend.box = "horizontal") +
+  theme(legend.position = "none") +
+  annotate(geom = "text", x = -1.5, y = -1.6, adj = 1, label = "sym / temp", size = 3.5) +
+  annotate(geom = "text", x = -1.5, y = -2.825, adj = 1, size = 2.5,
+           label = "C / control\nC / heated\nD / control\nD / heated") +
+  annotate(geom = "point", x = -3.2, y = seq(from = -2.15, by = -0.45, length.out = 4), 
+           size = 2, shape = c(21, 21, 24, 24), fill = c("black", "white", "black", "white"))
 
-dapc.fig
-
-xplot <- ggdensity(dapc, x = "LD1", fill = "grp", lwd = 0.25,
-                   palette = c("black", "white", "black", "white")) +
+xplot <- 
+  ggdensity(dapc, x = "LD1", fill = "grp", lwd = 0.25,
+            palette = c("black", "white", "black", "white")) +
+  annotate(geom = "point", x = c(-3,-0.75, 1.2, 2.5), y = c(0.37,0.48,0.6,0.35), 
+           pch = c(21, 24, 24, 21), fill = c("black", "black", "white", "white")) +
   clean_theme() + rremove("legend") + 
   theme(plot.margin = unit(c(0, 0, 0, 0), "cm"))
-xplot
+  
+#ggplot(dapc, aes(x = LD1, fill = grp)) + geom_density(alpha = 0.5, adjust = 1)
 
 fig3 <- plot_grid(xplot, NULL, dapc.fig, ncol = 1, align = "hv", rel_heights = c(0.7, -0.28, 2))
 fig3
+
 ggsave(filename = "figures/fig3.png", plot = fig3, width = 80, height = 80, units = "mm")
 ```
 
 The DAPC shows that despite the significant variability among colonies, the four treatment groups can be discriminated well based on gene expression data. The first discriminant function (x-axis) represents the effect of heat stress in general, with control temperature corals to the left and heated corals to the right. Along this axis, D-control corals are intermediate between C-control corals and heated corals, showing that the presence of D shifts the transcriptional state toward the heat-stressed state. The second discriminant function (y-axis) separates the distinct responses to heat stress that occur in C vs. D corals.
+
+```{r, include = FALSE, eval = FALSE}
+# DAPC - axis of heat stress in C corals (Ccontrol vs. Cheat), then see where D's fall along it (sensu Kenkel and Matz)
+
+# use batch-colony-removed vst counts
+vsd2 <- vsd
+#assay(vsd2) <- limma::removeBatchEffect(assay(vsd), vsd$colony)
+## Subset C-control and C-heat corals
+CcCh <- vsd2[, colData(vsd2)$group %in% c("Cc", "Ch")]
+dat <- data.frame(assay(CcCh))
+
+# Fit DAPC axis
+dp1 <- dapc(t(dat), colData(CcCh)$group, n.pca = 12, n.da = 1)
+scatter(dp1, scree.pca = T)
+
+# Calculate values along this axis
+## Subset D-control and D-heat corals
+DcDh <- vsd2[, colData(vsd2)$group %in% c("Dc", "Dh")]
+dat2 <- data.frame(assay(DcDh))
+## Get scores for these samples along the Cc-Ch DAPC axis
+pred.sup <- predict.dapc(dp1, newdata=(t(dat2)))
+
+# Create dapc object to plot new scores
+newdp <- dp1
+newdp$ind.coord<-pred.sup$ind.scores
+newdp$posterior<-pred.sup$posterior
+newdp$assign<-pred.sup$assign
+newdp$grp <- colData(DcDh)$group
+scatter(newdp)
+
+# Get scores for all groups
+dpc <- tibble(group = c(as.character(dp1$grp), as.character(newdp$grp)),
+              core = c(rownames(dp1$ind.coord), rownames(newdp$ind.coord)),
+              colony = str_sub(core, 3, 4),
+              score = c(dp1$ind.coord, newdp$ind.coord))
+ggplot(dpc, aes(x = score, fill = group)) + geom_density(adjust = 1, alpha = 0.5)
+ggplot(dpc, aes(x = group, y = score, shape = colony, color = colony)) + geom_point()
+
+# Test for differences between groups
+mod <- lm(score ~ group, data = dpc)
+anova(mod)
+lsm <- lsmeans(mod, specs = "group")
+contrast(lsm, "pairwise")
+
+# Ccontrol -- -1.94
+# Cheat ---    1.94    (diff = 3.89)
+# Dcontrol -- -0.16
+
+
+# I deemed this approach inappropriate because we shouldn't necessarily constrain the responses of D corals to occur along an axis of heat stress for C corals... they could respond in an entirely different way along an entirely different axis. Therefore, the DAPC with all four groups is more appropriate. LD1 still ends up corresponding very strongly to the axis of heat stress for C corals, and we still C that shuffling to D moves corals toward the heat stress end of the axis. We can still do a statistical test on LD1 values for different groups. 
+```
+
 
 # Differential expression (DE) analysis
 
@@ -395,7 +463,7 @@ DE <- crossing(colony = c("20", "22", "26"), group.contrasts) %>%
 
 Then, for all colonies together
 ```{r run_DESeq_together}
-# Run DESeq pipeline
+# Run DESeq pipeline 
 design(hs.dds) <- formula(~ colony + group)
 dsr2 <- DESeq(hs.dds)
 
@@ -410,7 +478,7 @@ DE <- crossing(colony = "all", group.contrasts) %>%
 DE <- DE %>%
   mutate(sig = map(dsr, ~ rownames_to_column(data.frame(.[which(.$padj < 0.1), ]), "gene")),
           up = map(sig, ~ filter(., log2FoldChange > 0)),
-        down = map(sig, ~ filter(., log2FoldChange < 0)))
+        down = map(sig, ~ filter(., log2FoldChange < 0))) 
 
 # Generate logP values for all differential expression contrasts
 DE <- DE %>% mutate(logP = map(dsr, ~ data.frame(
@@ -418,12 +486,16 @@ DE <- DE %>% mutate(logP = map(dsr, ~ data.frame(
   logP = -log10(data.frame(.)$pvalue) * sign(data.frame(.)$log2FoldChange))))
 
 # Count number of differentially expressed genes within each colony, and overall, for each contrast
-DE %>% 
-  unnest(sig) %>%
-  group_by(colony, num, den) %>%
-  summarise(n = n()) %>%
-  spread(colony, n) %>%
-  knitr::kable(caption = "Number of differentially expressed genes")
+DEtab <- DE %>%
+  mutate(nsig = map_dbl( sig, ~ nrow(.)),
+          nup = map_dbl(  up, ~ nrow(.)),
+          ndn = map_dbl(down, ~ nrow(.)),
+          `DEGs [up, down]` = paste0(nsig, " [", nup, ", ", ndn, "]")) %>%
+  select(colony, num, den, `DEGs [up, down]`) %>%
+  spread(colony, `DEGs [up, down]`) %>%
+  knitr::kable(caption = "Number of differentially expressed genes within individual colonies and across all colonies for each specified contrast. DEGs identified using DESeq with an adjusted p-value < 0.1. In brackets are the numbers of significantly up- and down-regulated genes.")
+
+DEtab
 ```
 
 ##### Assess similarity of responses across colonies
@@ -434,7 +506,7 @@ DE %>%
   group_by(num, den) %>%
   count(gene, log2FoldChange > 0) %>%   # In how many colonies is same gene DE in same direction?
   summarise(`1 colony` = sum(n==1), `2 colonies` = sum(n==2), `3 colonies` = sum(n==3)) %>%
-  knitr::kable(caption = "Number of differentially expressed genes in common")
+  knitr::kable(caption = "Number of differentially expressed genes in common") 
 ```
 
 In terms of the specific genes differentially expressed, each colony shows a very different response. There are ZERO differentially expressed genes in common across all three colonies when analyzed individually. However, we still find some differentially expressed genes in common when the colonies are analyzed together, likely due to higher statistical power.
@@ -473,7 +545,7 @@ Dctrl.Cctrl.GO <- as.list(
   ) %>% map(read.table, header = T) %>%
   bind_rows(.id = "ontology") %>%
   as_tibble() %>%
-  filter(p.adj < 0.05)
+  filter(p.adj < 0.01)
 
 Dctrl.Cctrl.GO %>%
   select(ontology, delta.rank, name, p.adj) %>%
@@ -513,7 +585,7 @@ Cheat.Cctrl.GO <- as.list(
   ) %>% map(read.table, header = T) %>%
   bind_rows(.id = "ontology") %>%
   as_tibble() %>%
-  filter(p.adj < 0.05)
+  filter(p.adj < 0.01)
 
 Cheat.Cctrl.GO %>%
   select(ontology, delta.rank, name, p.adj) %>%
@@ -553,7 +625,7 @@ Dheat.Dctrl.GO <- as.list(
   ) %>% map(read.table, header = T) %>%
   bind_rows(.id = "ontology") %>%
   as_tibble() %>%
-  filter(p.adj < 0.05)
+  filter(p.adj < 0.01)
 
 Dheat.Dctrl.GO %>%
   select(ontology, delta.rank, name, p.adj) %>%
@@ -594,12 +666,26 @@ Dheat.Cheat.GO <- as.list(
   ) %>% map(read.table, header = T) %>%
   bind_rows(.id = "ontology") %>%
   as_tibble() %>%
-  filter(p.adj < 0.05)
+  filter(p.adj < 0.01)
 
 Dheat.Cheat.GO %>%
   select(ontology, delta.rank, name, p.adj) %>%
   arrange(ontology, delta.rank) %>%
   knitr::kable()
+```
+
+Supplemental table with all GO results
+```{r}
+allGO <- bind_rows(.id = "contrast",
+  Dctrl.Cctrl = Dctrl.Cctrl.GO,
+  Cheat.Cctrl = Cheat.Cctrl.GO,
+  Dheat.Dctrl = Dheat.Dctrl.GO,
+  Dheat.Cheat = Dheat.Cheat.GO
+) %>%
+  select(contrast, ontology, delta.rank, name, p.adj) %>%
+  arrange(contrast, ontology, sign(delta.rank), p.adj)
+
+write_csv(allGO, path = "output/allGO.csv")
 ```
 
 # EuKaryotic Orthologous Groups (KOG) enrichment analysis
@@ -668,7 +754,7 @@ kogtable2 <- KOG %>%
   select(num, den, term, delta.rank) %>%
   unite("contrast", num, den, sep = ".") %>%
   spread(contrast, delta.rank) %>%
-  select(term, Dc.Cc, Ch.Cc, Dh.Dc, Dh.Ch) %>%
+  #select(term, Ch.Cc, Dc.Cc, Dh.Dc, Dh.Ch) %>%
   column_to_rownames("term")
   
 kogpval2 <- KOG %>%
@@ -677,19 +763,63 @@ kogpval2 <- KOG %>%
   select(num, den, term, padj) %>%
   unite("contrast", num, den, sep = ".") %>%
   spread(contrast, padj) %>%
-  select(term, Dc.Cc, Ch.Cc, Dh.Dc, Dh.Ch) %>%
+  #select(term, Ch.Cc, Dc.Cc, Dh.Dc, Dh.Ch) %>%
   column_to_rownames("term") %>%
   transmute_all(gtools::stars.pval)
 
-KOGheatmap(kogtable2, kogpval2, main = "Mean responses")
+kogheat <- KOGheatmap(
+  select(kogtable2, Ch.Cc, Dc.Cc, Dh.Dc, Dh.Ch),
+  select( kogpval2, Ch.Cc, Dc.Cc, Dh.Dc, Dh.Ch),
+  labels_col = c(expression("C"[H]~"vs."~"C"[C]),
+                  expression("D"[C]~"vs."~"C"[C]),
+                  expression("D"[H]~"vs."~"D"[C]),
+                  expression("C"[H]~"vs."~"C"[C])),
+  fontsize = 8)
+
+ggsave(filename = "figures/fig4.png", kogheat, width = 112, height = 84.5, units = "mm")
 ```
 
 Test similarity of transcriptome responses to different conditions by correlation of KOG delta-ranks
 ```{r KOG_correlations}
-GGally::ggpairs(kogtable2, lower = list(continuous = "smooth"))
+# Visualize KOG response correlations between different contrasts
+GGally::ggpairs(kogtable2, lower = list(continuous = "smooth"), diag = NULL)
 
-# Strong correlation (0.769) between effect of D and effect of heat stress on transcriptome
-# No correlation between the heat stress responses of corals with C or D (-0.0513).
+# Test whether correlation coefficients are greater than 0.5 (null hypothesis when comparing ratios with common denominator) or 0 (when ratios contain all different variables)
+comparisons <- c("~ Ch.Cc + Dc.Cc", "~ Ch.Cc + Dc.Ch", "~ Ch.Cc + Dh.Cc", "~ Ch.Cc + Dh.Ch", "~ Ch.Cc + Dh.Dc",
+                 "~ Dc.Cc + Dc.Ch", "~ Dc.Cc + Dh.Cc", "~ Dc.Cc + Dh.Ch", "~ Dc.Cc + Dh.Dc",
+                 "~ Dc.Ch + Dh.Cc", "~ Dc.Ch + Dh.Ch", "~ Dc.Ch + Dh.Dc",
+                 "~ Dh.Cc + Dh.Ch", "~ Dh.Cc + Dh.Dc",
+                 "~ Dh.Ch + Dh.Dc")
+
+tibble(comparison = comparisons) %>%
+  mutate(cor = map(comparison, ~ cor.test(as.formula(.), data = kogtable2) %>% broom::tidy())) %>%
+  unnest() %>%
+  select(comparison, estimate, conf.low, conf.high) %>%
+  mutate(samevars = map_lgl(comparison, ~ any(table(str_extract_all(., "C.|D.")) > 1)),
+         nocor = pmap_lgl(list(samevars, conf.low, conf.high), function(x, y, z) {
+           ifelse(x, !(y > 0.5 | z < -0.5), between(0, y, z))}))
+
+# The 95% correlation coefficient for Ch.Cc and Dc.Cc does not contain 0.5 -- the expected correlation coefficient between the two ratios if the correlation between their numerators was zero. 
+
+# The correlation between Dc/Cc and Ch/Cc is 0.77. They have a common denominator so part of this correlation is due to that alone, although part is also due to an (unmeasurable) correlation between Dc and Ch. The correlation between Dc and Ch must be at least 0.5 (in the most conservative case that the correlation of both Dc and Ch with Cc is zero) (see Dunlap et al. 1997). Further evidence that Dc and Ch are correlated is that no KOG categories are significantly different in the comparison of Dc to Ch.
+```
+
+```{r}
+# Figure showing KOG correlations between Dc.Cc and Ch.Cc, and lack of correlation between Dh.Dc and Ch.Cc.
+kogtable2 %>%
+  rownames_to_column("kog") %>%
+  gather(contrast, value, -kog, -Ch.Cc) %>%
+  filter(contrast %in% c("Dh.Dc", "Dc.Cc")) %>%
+  mutate(contrast = factor(contrast, levels = c("Dh.Dc", "Dc.Cc"),
+                           labels = c(expression("D"[H]~"vs."~"D"[C]), expression("D"[C]~"vs."~"C"[C])))) %>%
+  ggplot(aes(x = Ch.Cc, y = value)) +
+  facet_grid(contrast ~ ., labeller = "label_parsed") +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  stat_cor() +
+  labs(x = expression("C"[H]~"vs."~"C"[C]~"KOG delta ranks"), y = "KOG delta ranks")
+
+ggsave(plot = last_plot(), filename = "figures/fig5.png", width = 80, height = 120, units = "mm")
 ```
 
 
@@ -700,6 +830,80 @@ GGally::ggpairs(kogtable2, lower = list(continuous = "smooth"))
 
 Code archive
 
+
+```{r, eval = F}
+df <- tibble(
+  DcCcl2fc = DE$dsr[[3]]$log2FoldChange,
+  ChCcl2fc = DE$dsr[[4]]$log2FoldChange,
+  DhDcl2fc = DE$dsr[[1]]$log2FoldChange
+)
+
+ggplot(df, aes(x = ChCcl2fc, y = DcCcl2fc)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  stat_cor() +
+  geom_abline(slope = 1)
+
+ggplot(df, aes(x = ChCcl2fc, y = DhDcl2fc)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  stat_cor()
+
+ggplot(df, aes(x = DhDcl2fc, y = -DcCcl2fc)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  stat_cor()
+
+# Can we get normalized expression values instead of l2fc?
+DE$dsr[[1]]
+hs.dds
+design(hs.dds)
+results(hs.dds, contrast = )
+df <- tibble(
+  DcCcl2fc = DE$dsr[[3]]$log2FoldChange,
+  ChCcl2fc = DE$dsr[[4]]$log2FoldChange,
+  DhDcl2fc = DE$dsr[[1]]$log2FoldChange
+)
+```
+
+```{r, eval = F}
+# logic: if shuffling to D produces a response similar to heat stress in C
+###  e.g., Dc vs. Cc is similar to Ch. vs. Cc
+# does: shuffling to C produce a response similar to heat stress in D
+###  is    Cc vs. Dc similar to Dh vs. Dc?
+ggplot(df, aes(x = DhDcl2fc, y = -DcCcl2fc)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  stat_cor() +
+  geom_abline(slope = 1)
+## yes.... this seems to undermine the entire story....?
+
+### But---is this artifact of using all genes?
+## If look at KOG delta ranks, it's not significant... (NEED TO CONFIRM THIS)
+
+
+
+
+# maker random numbers
+df <- tibble(
+  n1 = runif(20),
+  n2 = runif(20),
+  n3 = n2 + runif(20),
+   d = runif(20)
+)
+
+ggplot(df, aes(x = log(n1/d), y = log(n2/d))) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  stat_cor() +
+  geom_abline(slope =1, intercept = 0)
+
+ggplot(df, aes(x = n2, y = n3)) + geom_point()
+
+#### NEED TO TEST WHETHER R > 0.5.... 0.5 expected with common denominator for random data!!!
+
+
+```
 
 
 ```{r, eval = FALSE}
@@ -834,19 +1038,33 @@ contrib <- loadingplot(dp1$var.contr, axis=1, thres=.003, lab.jitter=1)
 ### Plot counts of those genes
 plotCounts(hs.dds, gene = "Mcavernosa19950", intgroup = c("group"))
 
+plotCounts(hs.dds, gene = "Mcavernosa19950", intgroup = c("group"), returnData = TRUE)
+
+
+
+
 ### Find genes that load highly along axis 2 -- the one associated with unique heat response of C vs. D
 contrib <- loadingplot(dp1$var.contr, axis=2, thres=.003, lab.jitter=1)
 ### Plot counts of those genes
-plotCounts(hs.dds, gene = "Mcavernosa15521", intgroup = c("group"))
+plotCounts(hs.dds, gene = "Mcavernosa05569", intgroup = c("group"))
+plotCounts(hs.dds, gene = "Mcavernosa18398", intgroup = c("group"))
+plotCounts(hs.dds, gene = "Mcavernosa25590", intgroup = c("group"))
+plotCounts(hs.dds, gene = "Mcavernosa21308", intgroup = c("group"))
 ```
 
 
+```{r, eval = FALSE, include = FALSE}
+# correlation of all genes expression across groups
+# all <- as.list(rownames(hs.dds)) %>%
+#   future_map(~ plotCounts(hs.dds, gene = .x, intgroup = "group", returnData = TRUE))
 
+all <- data.frame(assay(vsd)) %>%
+  rownames_to_column("gene") %>%
+  gather(sample, vst, -gene) %>%
+  mutate(group = colData(vsd)[match(sample, rownames(colData(vsd))), "group"]) %>%
+  group_by(group, gene) %>%
+  summarise(meanvst = mean(log(vst))) %>%
+  spread(group, meanvst)
 
-
-
-Need to compare what we've found to what Barfield found. Any of the same effects of D vs. C??
-Look at the Barfield genes that change between C vs. D and see if ours are the same
-
-
-Did colony 26 have more or less reads, leading to its greater variance explained?   NO
+ggplot(all, aes(x = Cc, y = Dc)) + geom_point()
+```
