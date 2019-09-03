@@ -28,7 +28,7 @@ library(ggpubr)
 
 ## ggplot theme
 theme_custom <- function() {
-  theme_bw(base_size = 10, base_family = "Arial") %+replace%
+  theme_bw(base_size = 10) %+replace%    #, base_family = "Arial"
     theme(
       panel.grid.major = element_blank(), 
       panel.grid.minor = element_blank(), 
@@ -767,7 +767,7 @@ kogpval2 <- KOG %>%
   column_to_rownames("term") %>%
   transmute_all(gtools::stars.pval)
 
-kogheat <- KOGheatmap(
+fig4a <- KOGheatmap(
   select(kogtable2, Ch.Cc, Dc.Cc, Dh.Dc, Dh.Ch),
   select( kogpval2, Ch.Cc, Dc.Cc, Dh.Dc, Dh.Ch),
   labels_col = c(expression("C"[H]~"vs."~"C"[C]),
@@ -776,7 +776,7 @@ kogheat <- KOGheatmap(
                   expression("C"[H]~"vs."~"C"[C])),
   fontsize = 8)
 
-ggsave(filename = "figures/fig4.png", kogheat, width = 112, height = 84.5, units = "mm")
+ggsave(filename = "figures/fig4a.png", fig4a, width = 112, height = 84.5, units = "mm")
 ```
 
 Test similarity of transcriptome responses to different conditions by correlation of KOG delta-ranks
@@ -804,9 +804,9 @@ tibble(comparison = comparisons) %>%
 # The correlation between Dc/Cc and Ch/Cc is 0.77. They have a common denominator so part of this correlation is due to that alone, although part is also due to an (unmeasurable) correlation between Dc and Ch. The correlation between Dc and Ch must be at least 0.5 (in the most conservative case that the correlation of both Dc and Ch with Cc is zero) (see Dunlap et al. 1997). Further evidence that Dc and Ch are correlated is that no KOG categories are significantly different in the comparison of Dc to Ch.
 ```
 
-```{r}
+```{r, fig.width = 3.5}
 # Figure showing KOG correlations between Dc.Cc and Ch.Cc, and lack of correlation between Dh.Dc and Ch.Cc.
-kogtable2 %>%
+fig4b <- kogtable2 %>%
   rownames_to_column("kog") %>%
   gather(contrast, value, -kog, -Ch.Cc) %>%
   filter(contrast %in% c("Dh.Dc", "Dc.Cc")) %>%
@@ -816,13 +816,21 @@ kogtable2 %>%
   facet_grid(contrast ~ ., labeller = "label_parsed") +
   geom_point() +
   geom_smooth(method = "lm") +
-  stat_cor() +
+  stat_cor(size = 2) +
+  theme_custom() +
   labs(x = expression("C"[H]~"vs."~"C"[C]~"KOG delta ranks"), y = "KOG delta ranks")
 
-ggsave(plot = last_plot(), filename = "figures/fig5.png", width = 80, height = 120, units = "mm")
+ggsave(plot = last_plot(), filename = "figures/fig4b.png", width = 80, height = 120, units = "mm")
 ```
 
+```{r}
+# Combine KOG heatmap with KOG correlations into multi-panel figure
+grob4a = grid::grid.grabExpr(grid::grid.draw(fig4a)) 
 
+fig4 <- plot_grid(grob4a, fig4b, rel_widths = c(0.7, 0.3))
+
+ggsave(plot = fig4, filename = "figures/fig4.png", width = 169, height = 90, units = "mm")
+```
 
 
 
