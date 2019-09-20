@@ -1,0 +1,139 @@
+---
+title: "Supplemental analysis of *A. millepora* transcriptomes from Barfield et al."
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, cache = TRUE)
+```
+
+```{r, include = FALSE}
+# Load libraries
+library(DESeq2)
+library(limma)
+library(tidyverse)
+library(stringr)
+library(readxl)
+library(pheatmap)
+library(RColorBrewer)
+library(furrr)
+```
+
+## Import data and run DESeq analysis
+
+This code chunk imports the gene count data and performs filtering and grouping for DESeq analysis. It is based on the code accompanying Barfield et al. 2018, which can be found here: [https://github.com/sbarfield/tagSeq-commonGarden/blob/master/CG_DESeq2_walkthrough.R](https://github.com/sbarfield/tagSeq-commonGarden/blob/master/CG_DESeq2_walkthrough.R).
+
+```{r}
+# Import gene expression / count data
+counts <- read.table("supp_analysis_barfield/allcounts_millepora.txt", header = TRUE, row.names = 1)
+#shorten names
+names(counts)= sub(".sam.counts", "", names(counts))
+
+#remove outliers- undersequenced samples
+counts$o8a=NULL
+counts$w22a=NULL
+counts$w25c=NULL
+
+# how many genes have mean count>2?
+means=apply(counts,1,mean)
+table(means>2)
+
+# removing all genes with mean count less than 2 
+counts=counts[means>2,]
+nrow(counts)
+counts=data.frame(counts)
+
+#specify groups for analysis 
+group=c(rep("Orph", 32), rep("WilkieC", 13), rep("WilkieD", 12))
+
+#genotype
+ind=c(rep("o0", 3), rep("o10",3), rep("o1",3), rep("o2",3), rep("o3",3), rep("o4",3), rep("o6",3), rep("o7",3), rep("o8",2), rep("o9",3), rep("oM1",3), rep("w22",2), rep("w23",3), rep("w24",3), rep("w25",2), rep("w26",3), rep("w27",3), rep("w28",3), rep("w30",3), rep("w31",3))
+
+#ind.n
+ind.n=c(rep(1,3), rep(2,3), rep(3,3), rep(4,3), rep(5,3), rep(6,3), rep(7,3), rep(8,2), rep(9,3), rep(10,3), rep(11,3), rep(1,2), rep(2,3), rep(3,3), rep(4,2), rep(5,3), rep(1,3), rep(2,3), rep(3,3), rep(4,3))
+
+#replicate
+replicate=c(rep(c(1,2,3), 8), 1,2, 1,2,3,1,2,3,1,2,1,2,3,1,2,3,1,2,1,2,3, rep(c(1,2,3), 4))
+
+#location 
+location=c(rep("Orpheus", 32), rep("Wilkie", 25))
+
+#symbiont type 
+symbiont=c(rep("cladeC", 45),  rep("cladeD", 12))
+
+conditions=cbind(group, ind, ind.n, replicate, location, symbiont)
+conditions=data.frame(conditions)
+
+# Create DESeqDataSet
+dds <- DESeqDataSetFromMatrix(countData = counts,
+                              colData = conditions,
+                              design = ~ ind)
+# drop unused factor levels from colData
+colData(dds) <- droplevels(colData(dds))
+
+## Run DESeq pipeline
+dds <- DESeq(dds, betaPrior = TRUE)
+```
+
+## Differential expression analysis -- C vs. D corals, and randomized groupings
+
+This code tests for differential expression between the Wilkie corals with C (n = 5) or D (n = 4), and between all other randomized groupings of 5 vs. 4 of the Wilkie individuals (n = 126 total permutations). A p-value of 0.022 is used as a cutoff for differentially expressed genes since this is the empirical 10% FDR value calculated and used by Barfield et al. for this particular dataset.  
+
+```{r}
+# List of all individual genotypes (just the 9 from Wilkie!)
+individuals <- paste("ind", unique(grep("^w", colData(dds)$ind, value = T)), sep = "")
+
+# Create all 2-group combinations of the 9 Wilkie individuals - 1 group of 5 and 1 group of 4
+combos <- list()
+pick5 <- combn(individuals, 5)   
+for (i in 1:ncol(pick5)) {
+  group1 = pick5[, i]
+  combos[[i]] <- list(group1 = group1,
+                      group2 = individuals[!individuals %in% group1])
+}
+# The first combination is the actual C vs. D grouping
+names(combos) <- c("C vs D", paste0("rand", seq(1:(length(combos)-1))))
+
+# Run differential expression analysis for all permuted groups and count DEGs
+plan(multiprocess)  # Plan for parallel processing
+# Get results
+res <- combos %>%
+  future_map(function(x) results(dds, contrast = x, listValues = c(0.5, -0.5)))
+# Get number of DEGs
+degs <- res %>%
+  map(function(x) sum(x$pvalue < 0.022, na.rm = TRUE))
+# Get names of DEGs
+whichdegs <- res %>%
+  map(function(x) rownames(x[which(x$pvalue < 0.022), ]))
+
+# Combine combination names and number of DEGs
+df <- tibble(
+  combos = names(combos),
+  ndegs = unlist(degs)
+)
+```
+
+## Number of differentially expressed genes between two groups of 5 vs. 4 corals
+
+```{r}
+# Plot histogram
+ggplot(df, aes(x = ndegs, fill = ifelse(combos == "C vs D", "C vs D", "random groups"))) +
+  geom_histogram() +
+  theme(legend.title = element_blank()) +
+  labs(x = "Number of DEGs", "Count") +
+  xlim(0, 2300)
+
+# Find DEGs present in true C vs. D contrast and NOT present in any other contrast
+
+# CDdegs <- whichdegs[[which.max(lapply(whichdegs, FUN = length))]]
+# setdiff(CDdegs, unlist(whichdegs[-which.max(lapply(whichdegs, FUN = length))]))
+# 
+# plotCounts(dds, gene = "isogroup12950", intgroup = c("location", "symbiont"))
+# plotCounts(dds, gene = "isogroup1359", intgroup = c("location", "symbiont"))
+# plotCounts(dds, gene = "isogroup1610", intgroup = c("location", "symbiont"))
+# plotCounts(dds, gene = "isogroup18726", intgroup = c("location", "symbiont"))
+# plotCounts(dds, gene = "isogroup9726", intgroup = c("location", "symbiont"))
+```
+
