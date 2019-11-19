@@ -841,6 +841,33 @@ ggsave(plot = fig4, filename = "figures/fig4.png", width = 169, height = 90, uni
 ```
 
 
+# Are DEGs associated with symbiont shuffling due to having changed symbionts, or having bleached?
+
+Other coral genotypes were bleached but did not shuffle their symbionts -- they had clade C to begin with, and clade C after recovery. We can use these samples as controls to test whether the change in gene expression in corals that shuffle is attributable to the symbiont change or the previous stress.
+
+```{r}
+# Colonies EXCEPT 20, 22, and 26
+# Only time point at end of heat stress (but these were all at ambient - no hs)
+ns.dds <- dds[, !colData(dds)$colony %in% c(20, 22, 26) & colData(dds)$date_sampled == "2017-10-28"]
+# Filter out Mc2840 and Mc1740 -- these colonies had a high proportion of D.
+# (everything else had zero D, except 2 other samples had 7-8%)
+ns.dds <- ns.dds[, !rownames(colData(ns.dds)) %in% c("Mc28.40")]
+### Remove genes counted zero times in subset
+ns.dds <- ns.dds[ rowSums(counts(ns.dds)) > 0, ]
+# Remove genes with less than 1 mean count across samples
+ns.dds <- ns.dds[ rowMeans(counts(ns.dds)) > 1, ]
+### Drop unused factor levels
+colData(ns.dds) <- droplevels(colData(ns.dds))
+# Add design formula
+design(ns.dds) <- formula(~ colony + trt1)
+
+# Run DESeq pipeline
+ns.dds <- DESeq(ns.dds)
+
+# Find DE genes between prev. bleached vs. control (trt1)
+res <- results(ns.dds, contrast = c("trt1", "b", "c"))
+summary(res)  ### No differentially expressed genes!
+```
 
 
 
