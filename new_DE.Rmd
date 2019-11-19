@@ -824,7 +824,7 @@ fig4b <- kogtable2 %>%
   facet_grid(contrast ~ ., labeller = "label_parsed") +
   geom_point() +
   geom_smooth(method = "lm") +
-  stat_cor(size = 2) +
+  stat_cor(aes(label = ..r.label..), size = 2) +
   theme_custom() +
   labs(x = expression("C"[H]~"vs."~"C"[C]~"KOG delta ranks"), y = "KOG delta ranks")
 
