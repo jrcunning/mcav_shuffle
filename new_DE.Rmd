@@ -170,7 +170,7 @@ plot_grid(rps, rpg)
 # Filter out sample that did not shuffle -- Mc22.12 (17th sample in hs.dds)
 hs.dds <- hs.dds[, -17]
 
-# Remove genes with less than 2 mean count across samples
+# Remove genes with less than 1 mean count across samples
 hs.dds <- hs.dds[ rowMeans(counts(hs.dds)) > 1, ]
 
 # Normalize expression data for visualization purposes using VST tranformation
@@ -739,10 +739,18 @@ KOGheatmap <- function(deltaranks, pvals, ...) {
            color = myColor, breaks = myBreaks, ...)
 }
 
-KOGheatmap(kogtables$Dc.Cc, kogpvals$Dc.Cc, main = "D-control vs. C-control")
-KOGheatmap(kogtables$Ch.Cc, kogpvals$Ch.Cc, main = "C-heated vs. C-control")
-KOGheatmap(kogtables$Dh.Dc, kogpvals$Dh.Dc, main = "D-heated vs. D-control")
-KOGheatmap(kogtables$Dh.Ch, kogpvals$Dh.Ch, main = "D-heated vs. C-heated")
+KOGDcCc <- KOGheatmap(kogtables$Dc.Cc, kogpvals$Dc.Cc, main = "                     D-control vs. C-control", 
+                      fontsize = 8)
+ggsave(filename = "figures/FigS1.png", plot = KOGDcCc, width = 112, height = 84.5, units = "mm")
+KOGChCc <- KOGheatmap(kogtables$Ch.Cc, kogpvals$Ch.Cc, main = "                     C-heated vs. C-control",
+                      fontsize = 8)
+ggsave(filename = "figures/FigS2.png", plot = KOGChCc, width = 112, height = 84.5, units = "mm")
+KOGDhDc <- KOGheatmap(kogtables$Dh.Dc, kogpvals$Dh.Dc, main = "                     D-heated vs. D-control",
+                      fontsize = 8)
+ggsave(filename = "figures/FigS3.png", plot = KOGDhDc, width = 112, height = 84.5, units = "mm")
+KOGDhCh <- KOGheatmap(kogtables$Dh.Ch, kogpvals$Dh.Ch, main = "                     D-heated vs. C-heated",
+                      fontsize = 8)
+ggsave(filename = "figures/FigS4.png", plot = KOGDhCh, width = 112, height = 84.5, units = "mm")
 ```
 
 ##### Plot cross-colony KOG results for each contrast
@@ -804,7 +812,7 @@ tibble(comparison = comparisons) %>%
 # The correlation between Dc/Cc and Ch/Cc is 0.77. They have a common denominator so part of this correlation is due to that alone, although part is also due to an (unmeasurable) correlation between Dc and Ch. The correlation between Dc and Ch must be at least 0.5 (in the most conservative case that the correlation of both Dc and Ch with Cc is zero) (see Dunlap et al. 1997). Further evidence that Dc and Ch are correlated is that no KOG categories are significantly different in the comparison of Dc to Ch.
 ```
 
-```{r, fig.width = 3.5}
+```{r, fig.width = 3.5 }
 # Figure showing KOG correlations between Dc.Cc and Ch.Cc, and lack of correlation between Dh.Dc and Ch.Cc.
 fig4b <- kogtable2 %>%
   rownames_to_column("kog") %>%
@@ -827,7 +835,7 @@ ggsave(plot = last_plot(), filename = "figures/fig4b.png", width = 80, height = 
 # Combine KOG heatmap with KOG correlations into multi-panel figure
 grob4a = grid::grid.grabExpr(grid::grid.draw(fig4a)) 
 
-fig4 <- plot_grid(grob4a, fig4b, rel_widths = c(0.7, 0.3))
+fig4 <- plot_grid(NULL, grob4a, fig4b, rel_widths = c(0.025, 0.685, 0.29), nrow = 1, labels = c("A", "", "B"))
 
 ggsave(plot = fig4, filename = "figures/fig4.png", width = 169, height = 90, units = "mm")
 ```
