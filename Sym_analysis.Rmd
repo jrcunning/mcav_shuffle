@@ -32,8 +32,8 @@ trt1names <- c(
   b = "Bleached and recovered"
 )
 shuffnames <- c(
-  `TRUE` = "Shufflers",
-  `FALSE` = "Non-shufflers"
+  `TRUE` = "Shuffling colonies",
+  `FALSE` = "Non-shuffling colonies"
 )
 global_labeller <- labeller(
   trt1 = trt1names,
@@ -74,7 +74,7 @@ qpcr <- qpcr$result %>%
   separate("Sample.Name", into = c("colony", "core"))
 
 qpcr <- qpcr %>%
-  rowwise() %>% 
+  #rowwise() %>% 
   mutate(totSH = rowSums(.[, c("C.Mcav", "D.Mcav")], na.rm = TRUE)) %>%
   mutate(propD = case_when(
     (C.reps == 2 & D.reps < 2) ~ 0,
@@ -185,6 +185,7 @@ propdfig <- ggplot(df1, aes(x = trt1, y = propD, color = trt1), labeller = globa
   theme(legend.position = 0)
 
 propdfig
+ggsave(filename = "figures/FigS1.png", plot = propdfig)
 
 # Only shuffling colonies --- panel A in Figure 1
 propdfig <- df1 %>% 
