@@ -1,0 +1,34 @@
+---
+title: "Supplementary Information"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+# Figure S1
+```{r, out.width = "800px"}
+knitr::include_graphics("figures/FigS1.png")
+```
+
+# Figure S2
+![](figures/FigS2.png)
+
+# Figure S3
+![](figures/FigS3.png)
+
+# Figure S4
+![](figures/FigS4.png)
+
+# Figure S5
+![](figures/FigS5.png)
+
+# Table S1
+```{r}
+go <- read.csv("output/allGO.csv")
+knitr::kable(go)
+```
+
+# Figure S6
+![](figures/FigS6.png)
