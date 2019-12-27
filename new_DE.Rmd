@@ -42,9 +42,9 @@ theme_custom <- function() {
 }
 ## ggplot labeller
 colnames <- c(
-  `20` = "colony 20",
-  `22` = "colony 22",
-  `26` = "colony 26"
+  `20` = "genet 1",
+  `22` = "genet 2",
+  `26` = "genet 3"
 )
 
 contrastnames <- c(
@@ -189,6 +189,7 @@ sampleDistMatrix <- as.matrix(sampleDists)
 mds <- as.data.frame(colData(vsd)) %>% 
   cbind(cmdscale(sampleDistMatrix)) %>%
   mutate(fillcol = factor(ifelse(trt2 == "h", NA, colony))) %>%    # create factor for fill color in plot
+  mutate(genet = case_when(colony == 20 ~ "1", colony == 22 ~ "2", colony == 26 ~ "3")) %>%
   mutate(alphaval = ifelse(trt2 == "h", 1, 0))
 
 # Calculate group centroids for plotting
@@ -198,12 +199,12 @@ mds <- mds %>%
   full_join(mds)
 
 # Plot with spiders
-pcoa <- ggplot(mds, aes(color = colony, shape = sym)) +
+pcoa <- ggplot(mds, aes(color = genet, shape = sym)) +
   geom_segment(mapping = aes(x = `1`, y = `2`, xend = c1, yend = c2),
                lwd = 0.25, col = "grey") +
-  geom_point(size = 2, aes(x = c1, y = c2, fill = colony, alpha = as.character(alphaval))) +
+  geom_point(size = 2, aes(x = c1, y = c2, fill = genet, alpha = as.character(alphaval))) +
   geom_point(size = 2, aes(x = c1, y = c2), fill = ifelse(mds$alphaval, "white", NA)) +
-  geom_point(size = 0.7, aes(x = `1`, y = `2`, fill = colony, alpha = as.character(alphaval)), show.legend = F) +
+  geom_point(size = 0.7, aes(x = `1`, y = `2`, fill = genet, alpha = as.character(alphaval)), show.legend = F) +
   geom_point(size = 0.7, aes(x = `1`, y = `2`), fill = ifelse(mds$alphaval, "white", NA), show.legend = F) +
   scale_shape_manual(values = c(21, 24)) +
   scale_alpha_manual(values = c(1, 0), name = "temp", labels = c("control", "heated")) +
@@ -258,12 +259,12 @@ all <- all %>%
 stopCluster(cl)
 
 # Calculate sum of variance explained by each source across all genes for each colony
-all <- all %>% mutate(vpsum = map(vp, ~ summarise_all(., sum)))
+allsumm <- all %>% mutate(vpsum = map(vp, ~ summarise_all(., sum)))
 ```
 
 Plot sources of variance for each colony
 ```{r plot_varpart, eval = TRUE}
-varpartfig <- all %>% 
+varpartfig <- allsumm %>% 
   unnest(vpsum, .drop = T) %>%
   gather(source, value, -colony) %>%
   group_by(colony) %>%
@@ -288,7 +289,7 @@ fig2 <- cowplot::plot_grid(pcoa, varpartfig, rel_widths = c(2, 1), labels = "AUT
 ggsave(filename = "figures/fig2.png", fig2, width = 169, height = 84.5, units = "mm")
 
 
-all %>% 
+allsumm %>% 
   unnest(vpsum, .drop = T) %>%
   gather(source, value, -colony) %>%
   group_by(colony) %>%
@@ -487,15 +488,27 @@ DE <- DE %>% mutate(logP = map(dsr, ~ data.frame(
 
 # Count number of differentially expressed genes within each colony, and overall, for each contrast
 DEtab <- DE %>%
+  filter((num == "Ch" & den == "Cc")|(num == "Dc" & den == "Cc")|
+         (num == "Dh" & den == "Ch")|(num == "Dh" & den == "Dc")) %>%
   mutate(nsig = map_dbl( sig, ~ nrow(.)),
           nup = map_dbl(  up, ~ nrow(.)),
           ndn = map_dbl(down, ~ nrow(.)),
           `DEGs [up, down]` = paste0(nsig, " [", nup, ", ", ndn, "]")) %>%
-  select(colony, num, den, `DEGs [up, down]`) %>%
-  spread(colony, `DEGs [up, down]`) %>%
-  knitr::kable(caption = "Number of differentially expressed genes within individual colonies and across all colonies for each specified contrast. DEGs identified using DESeq with an adjusted p-value < 0.1. In brackets are the numbers of significantly up- and down-regulated genes.")
+  mutate(genet = case_when(colony == 20 ~ "genet 1", colony == 22 ~ "genet 2", colony == 26 ~ "genet 3", 
+                           colony == "all" ~ "all genets")) %>%
+  mutate(genet = factor(genet, levels = c("genet 1", "genet 2", "genet 3", "all genets"))) %>%
+  select(genet, num, den, `DEGs [up, down]`) %>%
+  spread(genet, `DEGs [up, down]`)
 
-DEtab
+
+knitr::kable(DEtab, caption = "Number of differentially expressed genes within individual genets and across all genets for each specified contrast. DEGs identified using DESeq with an adjusted p-value < 0.1. In brackets are the numbers of significantly up- and down-regulated genes.")
+
+rownames(DEtab) <- c("C~H~ vs. C~C~", "D~C~ vs. C~C~", "D~H~ vs. C~H~", "D~H~ vs. D~C~")
+dek <- DEtab %>% select(3:6) %>%
+  knitr::kable(format = "markdown", caption = "Number of differentially expressed genes within individual genets and across all genets for each specified contrast. DEGs identified using DESeq with an adjusted p-value < 0.1. In brackets are the numbers of significantly up- and down-regulated genes.")
+
+dek
+#save_kable(dek, file = "output/Table1.html")
 ```
 
 ##### Assess similarity of responses across colonies
@@ -705,18 +718,28 @@ KOG <- DE %>%
 
 # Generate all KOG delta rank tables
 kogtables <- KOG %>%
+  mutate(genet = case_when(colony == 20 ~ "genet 1", 
+                           colony == 22 ~ "genet 2", 
+                           colony == 26 ~ "genet 3", 
+                           colony == "all" ~ "all genets")) %>%
+  mutate(genet = factor(genet, levels = c("genet 1", "genet 2", "genet 3", "all genets"))) %>%
   unnest(KOG) %>%
-  select(colony, num, den, term, delta.rank) %>%
+  select(genet, num, den, term, delta.rank) %>%
   split(list(.$num, .$den), drop = TRUE) %>%
-  map(~ spread(., colony, delta.rank)) %>%
+  map(~ spread(., genet, delta.rank)) %>%
   map(~ column_to_rownames(select(., -num, -den), "term"))
 
 # Generate KOG p-value stars
 kogpvals <- KOG %>%
+  mutate(genet = case_when(colony == 20 ~ "genet 1", 
+                           colony == 22 ~ "genet 2", 
+                           colony == 26 ~ "genet 3", 
+                           colony == "all" ~ "all genets")) %>%
+  mutate(genet = factor(genet, levels = c("genet 1", "genet 2", "genet 3", "all genets"))) %>%
   unnest(KOG) %>%
-  select(colony, num, den, term, padj) %>%
+  select(genet, num, den, term, padj) %>%
   split(list(.$num, .$den), drop = TRUE) %>%
-  map(~ spread(., colony, padj)) %>%
+  map(~ spread(., genet, padj)) %>%
   map(~ column_to_rownames(select(., -num, -den), "term")) %>%
   map(~ transmute_all(., gtools::stars.pval))
 
@@ -741,16 +764,16 @@ KOGheatmap <- function(deltaranks, pvals, ...) {
 
 KOGDcCc <- KOGheatmap(kogtables$Dc.Cc, kogpvals$Dc.Cc, main = "                     D-control vs. C-control", 
                       fontsize = 8)
-ggsave(filename = "figures/FigS1.png", plot = KOGDcCc, width = 112, height = 84.5, units = "mm")
+ggsave(filename = "figures/FigS2.png", plot = KOGDcCc, width = 112, height = 84.5, units = "mm")
 KOGChCc <- KOGheatmap(kogtables$Ch.Cc, kogpvals$Ch.Cc, main = "                     C-heated vs. C-control",
                       fontsize = 8)
-ggsave(filename = "figures/FigS2.png", plot = KOGChCc, width = 112, height = 84.5, units = "mm")
+ggsave(filename = "figures/FigS3.png", plot = KOGChCc, width = 112, height = 84.5, units = "mm")
 KOGDhDc <- KOGheatmap(kogtables$Dh.Dc, kogpvals$Dh.Dc, main = "                     D-heated vs. D-control",
                       fontsize = 8)
-ggsave(filename = "figures/FigS3.png", plot = KOGDhDc, width = 112, height = 84.5, units = "mm")
+ggsave(filename = "figures/FigS4.png", plot = KOGDhDc, width = 112, height = 84.5, units = "mm")
 KOGDhCh <- KOGheatmap(kogtables$Dh.Ch, kogpvals$Dh.Ch, main = "                     D-heated vs. C-heated",
                       fontsize = 8)
-ggsave(filename = "figures/FigS4.png", plot = KOGDhCh, width = 112, height = 84.5, units = "mm")
+ggsave(filename = "figures/FigS5.png", plot = KOGDhCh, width = 112, height = 84.5, units = "mm")
 ```
 
 ##### Plot cross-colony KOG results for each contrast
@@ -781,7 +804,7 @@ fig4a <- KOGheatmap(
   labels_col = c(expression("C"[H]~"vs."~"C"[C]),
                   expression("D"[C]~"vs."~"C"[C]),
                   expression("D"[H]~"vs."~"D"[C]),
-                  expression("C"[H]~"vs."~"C"[C])),
+                  expression("C"[H]~"vs."~"C"[H])),
   fontsize = 8)
 
 ggsave(filename = "figures/fig4a.png", fig4a, width = 112, height = 84.5, units = "mm")
