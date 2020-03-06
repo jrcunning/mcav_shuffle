@@ -5,3 +5,5 @@ This project looks at the effects of symbiont shuffling and heat stress on the t
 ![](exp_design.png)
 
 The tag-based RNAseq and gene ontology enrichment analyses conducted here are based on code from Misha Matz's [tag-based_RNAseq](http://github.com/z0on/tag-based_RNAseq) and [GO_MWU](http://github.com/z0on/GO_MWU) repositories, which have been modified and internalized for this specific project.
+
+Raw Illumina sequence data associated with this project is available from NCBI: BioProject accession [PRJNA610282](https://www.ncbi.nlm.nih.gov/sra/PRJNA610282); SRA accession [SRP251653](https://www.ncbi.nlm.nih.gov/Traces/study/?acc=SRP251653).
