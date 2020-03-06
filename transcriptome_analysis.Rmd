@@ -170,6 +170,10 @@ plot_grid(rps, rpg)
 # Filter out sample that did not shuffle -- Mc22.12 (17th sample in hs.dds)
 hs.dds <- hs.dds[, -17]
 
+######
+## testing andrew's suggestion of removing three co-dominant C/D samples: 20-12(3), 26-07(25), 20-01(1))
+#hs.dds <- hs.dds[, -c(1,3,25)]
+
 # Remove genes with less than 1 mean count across samples
 hs.dds <- hs.dds[ rowMeans(counts(hs.dds)) > 1, ]
 
@@ -230,7 +234,8 @@ coldata <- sdat %>%
   rownames_to_column("sample") %>%
   as_tibble() %>%
   select(sample, colony, sym, trt2, date_sampled, group) %>%
-  filter(sample != "Mc22.12")   # Exclude sample that did not shuffle symbionts
+  filter(sample != "Mc22.12") %>%  # Exclude sample that did not shuffle symbionts 
+  #filter(!sample %in% c("Mc20.12", "Mc26.07", "Mc20-01"))    ### try andrew's suggestion removing codominant samples
 # Gather raw counts into tibble
 colcounts <- counts %>%
   rownames_to_column("gene") %>%
@@ -260,6 +265,15 @@ stopCluster(cl)
 
 # Calculate sum of variance explained by each source across all genes for each colony
 allsumm <- all %>% mutate(vpsum = map(vp, ~ summarise_all(., sum)))
+
+all$vp[[3]] %>%
+  as.data.frame(.) %>%
+  summarise_all(., median)
+
+plotVarPart(all$vp[[3]])
+rowSums(assay(all$vsd[[3]]))
+mean(all$vp[[3]]$sym)
+weighted.mean(all$vp[[3]]$sym, w = rowSums(assay(all$vsd[[3]])))
 ```
 
 Plot sources of variance for each colony

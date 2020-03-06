@@ -118,12 +118,23 @@ df <- tibble(
 ## Number of differentially expressed genes between two groups of 5 vs. 4 corals
 
 ```{r}
+# Calc means of random and non-random groupings
+means <- df %>%
+  group_by(random = grepl("rand", combos)) %>%
+  summarise(mean = mean(ndegs))
+
 # Plot histogram
 ggplot(df, aes(x = ndegs, fill = ifelse(combos == "C vs D", "C vs D", "random groups"))) +
   geom_histogram() +
   theme(legend.title = element_blank()) +
-  labs(x = "Number of DEGs", "Count") +
-  xlim(0, 2300)
+  labs(x = "Number of DEGs", "Number of groups of 5 vs. 4 colonies") +
+  xlim(0, 2300) +
+  geom_text(data = means, aes(x = mean, y = -1, color = random, fill = random, label = round(mean, 0))) +
+  theme(legend.position = "none")
+
+ggsave(filename = "figures/FigS6.png")
+
+
 
 # Find DEGs present in true C vs. D contrast and NOT present in any other contrast
 
