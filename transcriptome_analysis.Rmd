@@ -234,7 +234,7 @@ coldata <- sdat %>%
   rownames_to_column("sample") %>%
   as_tibble() %>%
   select(sample, colony, sym, trt2, date_sampled, group) %>%
-  filter(sample != "Mc22.12") %>%  # Exclude sample that did not shuffle symbionts 
+  filter(sample != "Mc22.12") #%>%  # Exclude sample that did not shuffle symbionts 
   #filter(!sample %in% c("Mc20.12", "Mc26.07", "Mc20-01"))    ### try andrew's suggestion removing codominant samples
 # Gather raw counts into tibble
 colcounts <- counts %>%
