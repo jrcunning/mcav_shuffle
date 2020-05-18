@@ -11,8 +11,8 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, cache = TRU
 
 ```{r load_libraries, include = FALSE}
 # Load libraries
-library(DESeq2)
-library(limma)
+library(DESeq2)    # BiocManager::install('DESeq2')
+library(limma)     # BiocManager::install('limma')
 library(stringr)
 library(readxl)
 library(pheatmap)
@@ -125,7 +125,7 @@ count_summ <- read.table("data/tagseq/processed/count_totals_newpars.txt") %>%
   separate(sample_id, into = c("colony", "core"))
 
 # Summarize counts for only samples included in paper (sampled 2017-10-28)
-filter(sdat, date_sampled == "2017-10-28") %>%
+counttable <- filter(sdat, date_sampled == "2017-10-28") %>%
   left_join(count_summ) %>%
   group_by(stage) %>%
   summarize(`Min. (per sample)` = min(count),
@@ -133,8 +133,11 @@ filter(sdat, date_sampled == "2017-10-28") %>%
             `Median (per sample)` = median(count),
             Total = sum(count)) %>%
   mutate_if(is_numeric, ~ format(ceiling(.), big.mark = ",")) %>%
-  arrange(rev(stage)) %>%
-  knitr::kable(caption = "Total read counts")
+  arrange(rev(stage))
+ 
+
+counttable %>%
+   knitr::kable(caption = "Total read counts")
 
 # Number of samples
 nsamples <- ncol(counts(dds))
@@ -162,7 +165,13 @@ rpg <- qplot(log10(rowSums(counts(dds))), bins = 16) +
        title = "Mapped reads per gene") +
   geom_label(aes(x = 4, y = 1500, label = paste(ngenes, "genes")))
 
-plot_grid(rps, rpg)
+countfig <- plot_grid(rps, rpg)
+
+countfig
+
+# Save table and fig to include in supplemental information
+write_csv(counttable, path = "output/readcounttable.csv")
+ggsave(countfig, filename = "output/countfig.png", device = "png", width = 150, height = 85, units = "mm")
 ```
 
 #### Filter and transform count data
@@ -565,6 +574,7 @@ source("GO_MWU.R")
 ```
 
 ```{r Dctrl.Cctrl.GO}
+# Get list of all significant GO terms for contrast
 Dctrl.Cctrl.GO <- as.list(
   c(BP = "code/GO_MWU/MWU_BP_Dctrl.Cctrl.logP.txt",
     MF = "code/GO_MWU/MWU_MF_Dctrl.Cctrl.logP.txt",
@@ -572,12 +582,34 @@ Dctrl.Cctrl.GO <- as.list(
   ) %>% map(read.table, header = T) %>%
   bind_rows(.id = "ontology") %>%
   as_tibble() %>%
-  filter(p.adj < 0.01)
+  filter(p.adj < 0.01) %>%
+  select(ontology, nseqs, name, delta.rank, p.adj)
 
+# Get list of individual genes with GO annotations and p-values for contrast
+allgenepvals <- as.list(
+  c(BP = "code/GO_MWU/BP_Dctrl.Cctrl.logP.txt",
+    MF = "code/GO_MWU/MF_Dctrl.Cctrl.logP.txt",
+    CC = "code/GO_MWU/CC_Dctrl.Cctrl.logP.txt")
+  ) %>% map(read_tsv) %>%
+  bind_rows(.id = "ontology")
+
+# For all significant GO terms, count how many genes with that GO term have raw pvalue < 0.05 (= "nsig")
+Dctrl.Cctrl.GO <- Dctrl.Cctrl.GO %>%
+  mutate(nsig = map_dbl(name, function(.) {
+    filter(allgenepvals, name == ., -abs(value) <= log10(0.05)) %>%
+    nrow(.)
+  }))
+  
+# Print table
 Dctrl.Cctrl.GO %>%
-  select(ontology, delta.rank, name, p.adj) %>%
+  unite("genes", nsig, nseqs, sep = "/") %>%
   arrange(ontology, delta.rank) %>%
   knitr::kable()
+
+# Run Matz code to create gomwuplot
+# setwd("code/GO_MWU/")
+# gomwuPlot(inFile = "Dctrl.Cctrl.logP.txt", 
+#   goDivision = "CC", goAnnotations = "Mcavernosa_gene2go.txt")
 ```
 
 ### C-heat vs. C-control
@@ -605,6 +637,7 @@ source("GO_MWU.R")
 ```
 
 ```{r Cheat.Cctrl.GO}
+# Get list of all significant GO terms for contrast
 Cheat.Cctrl.GO <- as.list(
   c(BP = "code/GO_MWU/MWU_BP_Cheat.Cctrl.logP.txt",
     MF = "code/GO_MWU/MWU_MF_Cheat.Cctrl.logP.txt",
@@ -612,10 +645,27 @@ Cheat.Cctrl.GO <- as.list(
   ) %>% map(read.table, header = T) %>%
   bind_rows(.id = "ontology") %>%
   as_tibble() %>%
-  filter(p.adj < 0.01)
+  filter(p.adj < 0.01) %>%
+  select(ontology, nseqs, name, delta.rank, p.adj)
 
+# Get list of individual genes with GO annotations and p-values for contrast
+allgenepvals <- as.list(
+  c(BP = "code/GO_MWU/BP_Cheat.Cctrl.logP.txt",
+    MF = "code/GO_MWU/MF_Cheat.Cctrl.logP.txt",
+    CC = "code/GO_MWU/CC_Cheat.Cctrl.logP.txt")
+  ) %>% map(read_tsv) %>%
+  bind_rows(.id = "ontology")
+
+# For all significant GO terms, count how many genes with that GO term have raw pvalue < 0.05 (= "nsig")
+Cheat.Cctrl.GO <- Cheat.Cctrl.GO %>%
+  mutate(nsig = map_dbl(name, function(.) {
+    filter(allgenepvals, name == ., -abs(value) <= log10(0.05)) %>%
+    nrow(.)
+  }))
+  
+# Print table
 Cheat.Cctrl.GO %>%
-  select(ontology, delta.rank, name, p.adj) %>%
+  unite("genes", nsig, nseqs, sep = "/") %>%
   arrange(ontology, delta.rank) %>%
   knitr::kable()
 ```
@@ -645,6 +695,7 @@ source("GO_MWU.R")
 ```
 
 ```{r Dheat.Dctrl.GO}
+# Get list of all significant GO terms for contrast
 Dheat.Dctrl.GO <- as.list(
   c(BP = "code/GO_MWU/MWU_BP_Dheat.Dctrl.logP.txt",
     MF = "code/GO_MWU/MWU_MF_Dheat.Dctrl.logP.txt",
@@ -652,10 +703,27 @@ Dheat.Dctrl.GO <- as.list(
   ) %>% map(read.table, header = T) %>%
   bind_rows(.id = "ontology") %>%
   as_tibble() %>%
-  filter(p.adj < 0.01)
+  filter(p.adj < 0.01) %>%
+  select(ontology, nseqs, name, delta.rank, p.adj)
 
+# Get list of individual genes with GO annotations and p-values for contrast
+allgenepvals <- as.list(
+  c(BP = "code/GO_MWU/BP_Dheat.Dctrl.logP.txt",
+    MF = "code/GO_MWU/MF_Dheat.Dctrl.logP.txt",
+    CC = "code/GO_MWU/CC_Dheat.Dctrl.logP.txt")
+  ) %>% map(read_tsv) %>%
+  bind_rows(.id = "ontology")
+
+# For all significant GO terms, count how many genes with that GO term have raw pvalue < 0.05 (= "nsig")
+Dheat.Dctrl.GO <- Dheat.Dctrl.GO %>%
+  mutate(nsig = map_dbl(name, function(.) {
+    filter(allgenepvals, name == ., -abs(value) <= log10(0.05)) %>%
+    nrow(.)
+  }))
+  
+# Print table
 Dheat.Dctrl.GO %>%
-  select(ontology, delta.rank, name, p.adj) %>%
+  unite("genes", nsig, nseqs, sep = "/") %>%
   arrange(ontology, delta.rank) %>%
   knitr::kable()
 ```
@@ -695,10 +763,7 @@ Dheat.Cheat.GO <- as.list(
   as_tibble() %>%
   filter(p.adj < 0.01)
 
-Dheat.Cheat.GO %>%
-  select(ontology, delta.rank, name, p.adj) %>%
-  arrange(ontology, delta.rank) %>%
-  knitr::kable()
+### no significant GO terms for Dheat vs. Cheat...
 ```
 
 Supplemental table with all GO results
@@ -709,8 +774,9 @@ allGO <- bind_rows(.id = "contrast",
   Dheat.Dctrl = Dheat.Dctrl.GO,
   Dheat.Cheat = Dheat.Cheat.GO
 ) %>%
-  select(contrast, ontology, delta.rank, name, p.adj) %>%
-  arrange(contrast, ontology, sign(delta.rank), p.adj)
+  unite("genes", nsig, nseqs, sep = "/") %>%
+  select(contrast, ontology, genes, name, delta.rank, p.adj) %>%
+  arrange(contrast, ontology, delta.rank)
 
 write_csv(allGO, path = "output/allGO.csv")
 ```
@@ -799,7 +865,7 @@ kogtable2 <- KOG %>%
   select(num, den, term, delta.rank) %>%
   unite("contrast", num, den, sep = ".") %>%
   spread(contrast, delta.rank) %>%
-  #select(term, Ch.Cc, Dc.Cc, Dh.Dc, Dh.Ch) %>%
+  select(term, Ch.Cc, Dc.Cc, Dh.Dc, Dh.Ch) %>%
   column_to_rownames("term")
   
 kogpval2 <- KOG %>%
@@ -808,7 +874,7 @@ kogpval2 <- KOG %>%
   select(num, den, term, padj) %>%
   unite("contrast", num, den, sep = ".") %>%
   spread(contrast, padj) %>%
-  #select(term, Ch.Cc, Dc.Cc, Dh.Dc, Dh.Ch) %>%
+  select(term, Ch.Cc, Dc.Cc, Dh.Dc, Dh.Ch) %>%
   column_to_rownames("term") %>%
   transmute_all(gtools::stars.pval)
 
@@ -818,10 +884,32 @@ fig4a <- KOGheatmap(
   labels_col = c(expression("C"[H]~"vs."~"C"[C]),
                   expression("D"[C]~"vs."~"C"[C]),
                   expression("D"[H]~"vs."~"D"[C]),
-                  expression("C"[H]~"vs."~"C"[H])),
+                  expression("D"[H]~"vs."~"C"[H])),
   fontsize = 8)
 
 ggsave(filename = "figures/fig4a.png", fig4a, width = 112, height = 84.5, units = "mm")
+
+# Get number of genes DE p<0.05 associated with each KOG term
+kogout <- KOG %>%
+  unnest(KOG) %>%
+  filter(colony == "all") %>%
+  unite("contrast", num, den, sep = ".") %>%
+  select(contrast, dsr, term, nseqs, delta.rank, padj) %>%
+  filter(contrast %in%  c("Ch.Cc", "Dh.Dc", "Dc.Cc", "Dh.Ch"))
+
+kogout <- kogout %>%
+  mutate(nsig = map2_dbl(term, dsr, function(.x, .y) {
+    geneswithterm <- filter(gene2kog, V2 == .x) %>% pull(V1)
+    geneswithp <- rownames_to_column(data.frame(.y[which(.y$pvalue < 0.05), ]), "gene")
+    return(length(intersect(geneswithterm, geneswithp$gene)))
+  }))
+
+# Write table for supp info
+kogout %>%
+  filter(padj < 0.1) %>%
+  unite("genes", nsig, nseqs, sep = "/") %>%
+  select(contrast, genes, term, delta.rank, padj) %>%
+  write_tsv("output/kogout.txt")
 ```
 
 Test similarity of transcriptome responses to different conditions by correlation of KOG delta-ranks
@@ -886,8 +974,7 @@ Other coral genotypes were bleached but did not shuffle their symbionts -- they 
 # Colonies EXCEPT 20, 22, and 26
 # Only time point at end of heat stress (but these were all at ambient - no hs)
 ns.dds <- dds[, !colData(dds)$colony %in% c(20, 22, 26) & colData(dds)$date_sampled == "2017-10-28"]
-# Filter out Mc2840 and Mc1740 -- these colonies had a high proportion of D.
-# (everything else had zero D, except 2 other samples had 7-8%)
+# Filter out Mc2840 -- it shuffled and had high propD
 ns.dds <- ns.dds[, !rownames(colData(ns.dds)) %in% c("Mc28.40")]
 ### Remove genes counted zero times in subset
 ns.dds <- ns.dds[ rowSums(counts(ns.dds)) > 0, ]
@@ -903,8 +990,30 @@ ns.dds <- DESeq(ns.dds)
 
 # Find DE genes between prev. bleached vs. control (trt1)
 res <- results(ns.dds, contrast = c("trt1", "b", "c"))
-summary(res)  ### No differentially expressed genes!
+summary(res)  ### No differentially expressed genes
 ```
+
+```{r}
+# Visualize nonshuffling corals with PCoA
+vsd <- vst(ns.dds, blind = TRUE)
+
+## Calculate distances among samples
+sampleDists <- dist(t(assay(vsd)), method = "manhattan")
+sampleDistMatrix <- as.matrix(sampleDists)
+
+## Calculate MDS
+mds <- as.data.frame(colData(vsd)) %>% 
+  cbind(cmdscale(sampleDistMatrix))# %>%
+ 
+noshuffpcoa <- ggplot(mds, aes(x = `1`, y = `2`, color = trt1, shape = colony)) +
+  geom_point() +
+  scale_color_discrete(name = "Treatment", labels = c("Bleached and\nrecovered", "Control")) +
+  scale_shape_discrete(name = "Genet") +
+  labs(x = "PC1", y = "PC2")
+
+ggsave(noshuffpcoa, file = "output/noshuffpcoa.png", width = 50, height = 50, units = "mm")
+```
+
 
 
 
