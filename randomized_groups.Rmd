@@ -1,0 +1,488 @@
+---
+title: "randomized groups"
+output:
+  html_document:
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, cache = TRUE)
+```
+
+```{r load_libraries, include = FALSE}
+# Load libraries
+library(DESeq2)    # BiocManager::install('DESeq2')
+library(limma)     # BiocManager::install('limma')
+library(stringr)
+library(readxl)
+library(pheatmap)
+library(RColorBrewer)
+library(variancePartition)  # BiocManager::install('variancePartition')
+library(doParallel)
+library(cowplot)
+library(tidyverse)
+library(KOGMWU)  # install.packages("KOGMWU")
+library(adegenet)
+library(ggpubr)
+library(furrr)
+
+## ggplot theme
+theme_custom <- function() {
+  theme_bw(base_size = 10) %+replace%    #, base_family = "Arial"
+    theme(
+      panel.grid.major = element_blank(), 
+      panel.grid.minor = element_blank(), 
+      panel.background = element_blank(),
+      panel.border = element_rect(color = "black", fill = NA),
+      legend.background = element_rect(fill = NA, colour = NA),
+      axis.text.x = element_text(angle=45, hjust=1, vjust = 1)#,
+      #legend.title = element_text(size = 8), 
+      #legend.text = element_text(size = 7)
+    )
+}
+## ggplot labeller
+colnames <- c(
+  `20` = "genet 1",
+  `22` = "genet 2",
+  `26` = "genet 3"
+)
+
+contrastnames <- c(
+  `Dc.Cc` = expression("D"[C]~"vs."~"C"[C]),
+  `Dh.Dc` = expression("D"[H]~"vs."~"D"[C]),
+  `Ch.Cc` = expression("C"[H]~"vs."~"C"[C])
+)
+
+global_labeller <- labeller(
+  colony = colnames,
+  contrast = contrastnames,
+  .default = "label_parsed"
+)
+```
+
+# Load data
+
+##### Gene count data
+```{r import_counts}
+# Import gene expression / count data
+counts <- read.table("data/tagseq/processed/counts_newpars.txt", 
+                     header = TRUE, row.names = 1)
+# Trim column names to just the sample name
+colnames(counts) <- str_sub(colnames(counts), 1, 7)
+# Order columns by sample name
+counts <- counts[, order(colnames(counts))]
+# Proportionally reduce all counts  in Mc20.05 by an order of magnitude
+#counts[, "Mc20.05"] <-  round(counts[, "Mc20.05"] * 0.1, 0)
+```
+
+##### Sample metadata
+```{r sample_metadata}
+# Import sample metadata
+sdat <- read_xlsx("data/sample_metadata.xlsx") %>%
+  mutate(sym = recode(trt1, b = "D", c = "C"),
+         sample = paste0(species, colony, ".", core),
+         group = paste(sym, trt2, sep = ""),
+         colony = factor(colony),
+         colony.group = interaction(colony, group)) %>%
+  mutate_if(is.character, as.factor) %>%
+  arrange(sample) %>%                              # order rows by sample name
+  column_to_rownames(var = "sample")               # set sample name to rownames
+```
+
+#### Create DESeqDataSet
+```{r subset_dds}
+# Create full DESeqDataSet
+dds <- DESeqDataSetFromMatrix(countData = counts,
+                              colData = sdat,
+                              design = ~ colony)
+
+# Subset DESeqDataSet
+## Subset time point at end of heat stress
+dds <- dds[, colData(dds)$date_sampled == "2017-10-28"]   
+### Remove genes counted zero times in subset
+dds <- dds[ rowSums(counts(dds)) > 0, ]
+
+## Subset only the colonies in the heat stress experiment
+hs.dds <- dds[, colData(dds)$colony %in% c(20, 22, 26)]   
+### Remove genes counted zero times in subset
+hs.dds <- hs.dds[ rowSums(counts(hs.dds)) > 0, ]
+### Drop unused factor levels
+colData(hs.dds) <- droplevels(colData(hs.dds))
+
+# Set design formula to test differences among groups accounting for colony
+design(hs.dds) <- formula(~ colony + group)
+
+# Filter out sample that did not shuffle -- Mc22.12 (17th sample in hs.dds)
+hs.dds <- hs.dds[, -17]
+
+# Remove genes with less than 1 mean count across samples
+hs.dds <- hs.dds[rowMeans(counts(hs.dds)) > 1, ]
+```
+
+```{r}
+# Clear memory except for hs.dds
+#rm(list=setdiff(ls(), "hs.dds"))
+```
+
+#### RANDOMIZE GROUPING VARIABLES -- symbiont and heat stress treatment, within each colony
+```{r}
+actual_colData <- colData(hs.dds)
+# RANDOMIZE SYMBIONTS and heat stress WITHIN EACH COLONY
+nsim <- 550
+
+# Create n=nsim randomized colData Data Frames for DESeqDataSet
+rand_colData <- list()
+for (i in 1:nsim) {
+  rand_colData[i] <- data.frame(colData(hs.dds)) %>%
+  group_by(colony, trt2) %>%
+  mutate(sym = base::sample(sym)) %>%
+  group_by(colony, sym) %>%
+  mutate(trt2 = base::sample(trt2),
+         group = paste0(sym, trt2),
+         colony.group = paste(colony, group, sep=".")) %>%
+  ungroup() %>%
+  mutate(group = as.factor(group),
+         colony.group = as.factor(colony.group)) %>%
+  DataFrame()
+}
+
+# # Filter random permutations to ensure similar read depth across groups
+# evenGroups <- function(colDat) {
+#   p.mean <- anova(lm(colSums(counts(hs.dds)) ~ data.frame(colDat)$group))$Pr[1]
+#   p.var  <- bartlett.test(colSums(counts(hs.dds)) ~ data.frame(colDat)$group)$p.value
+#   if (p.mean > 0.8 & p.var > 0.39) {
+#     return(colDat)
+#   } else {
+#     return(NULL)
+#   }
+# }
+# 
+# rand_colData <- rand_colData %>%
+#   map(evenGroups) %>%
+#   discard(is.null)
+
+#ff <- rand_colData[[76]]
+
+# pvals<-rand_colData %>%
+#   map_dbl(~ anova(lm(colSums(counts(hs.dds)) ~ data.frame(.)$group))$Pr[1])
+# 
+# rand_colData[[83]]
+#bartlett.test(colSums(counts(hs.dds)) ~ data.frame(rand_colData[[76]])$group)
+#plot(colSums(counts(hs.dds)) ~ data.frame(rand_colData[[76]])$group)
+# 
+#bartlett.test(colSums(counts(hs.dds)) ~ data.frame(actual_colData)$group)
+# plot(log(colSums(counts(hs.dds))) ~ data.frame(actual_colData)$group, type = "p")
+# 
+# hh <- rand_colData %>%
+#   map_dbl(~ bartlett.test(colSums(counts(hs.dds)) ~ data.frame(.)$group)$p.value)
+# 
+# hist(hh)
+```
+
+```{r}
+# Set up for parallel processing of randomized datasets in downstream analyses
+plan(multiprocess)
+```
+
+# Differential expression (DE) analysis
+
+Since colonies appear to respond differently to symbiont type and heating, we should analyze differential expression in each colony separately to assess their unique responses. We can also analyze differential expression across all colonies together to see what responses are common to all three.
+
+
+##### Run DESeq analysis for all genets together
+
+```{r run_DESeq_colonies, warning=FALSE}
+# Define group contrasts
+group.contrasts <- tibble(num = c("Dh", "Dh", "Dc", "Ch"),
+                          den = c("Dc", "Ch", "Cc", "Cc"))
+
+group.contrasts <- tibble(num = c("Dh", "Dh", "Dh", "Dc", "Dc", "Ch"),
+                          den = c("Dc", "Ch", "Cc", "Ch", "Cc", "Cc"))
+# Need to sum DEGs from all possible pairwise contrasts to compare to random groupings
+
+# Function to run DESeq for given version of colData, get DEGs and logP values. DEGs are called using the FDR threshold of 0.1, but also require that baseMean > 5. This threshold was set after observing that some of the random permutations were generating very high number of DEGs with very low average expression (baseMean). Another filter was added on the maximum difference in log(sizeFactors) between permuted groups (< 0.5) to avoid cases where read depths randomly differed between groups, causing high numbers of DEGs.
+get_degs <- function(rd) {
+  # Create DESeq object with random grouping data (rd)
+  dds <- hs.dds
+  colData(dds) <- rd
+  # Run DESeq pipeline
+  dsr <- DESeq(dds, minmu = 0.5)
+  # Get the estimated sizeFactors to make sure they do not differ too much among groups (will skew DE)
+  sizeF <- tibble(group = rd$group, sizeF = sizeFactors(dsr)) %>%
+    group_by(group) %>%
+    summarise(msize = mean(log(sizeF)))
+  maxdiffsizeF <- max(c(dist(sizeF$msize)))
+  # If max diff in sizeFactors between two groups is less than a cutoff, proceed with DE analysis
+  #if (maxdiffsizeF < 0.4) {
+    # Get number of significant DE genes for each group contrast
+    res <- tibble(dsr = list(dsr)) %>%
+      expand_grid(group.contrasts) %>%
+      mutate(res = pmap(list(dsr, num, den), function(dsr, num, den) {
+          results(dsr, contrast = c("group", num, den))})) %>%
+      mutate(nsig = map_dbl(res, ~ nrow(data.frame(.[which(.$padj < 0.1), ])))) %>%#,
+             #nsigmean3 = map_dbl(res, ~ nrow(data.frame(.[which(.$padj < 0.1 & .$baseMean > 3), ])))) %>% #,
+             #nsigmean10 = map_dbl(res, ~ nrow(data.frame(.[which(.$padj < 0.1 & .$baseMean > 10), ])))) %>%
+      mutate(medl2fc = map_dbl(res, ~ median(data.frame(.)$log2FoldChange))) %>%
+      #mutate(logP = map(res, ~ data.frame(
+      #  gene = rownames(data.frame(.)),
+      #  logP = -log10(data.frame(.)$pvalue) * sign(data.frame(.)$log2FoldChange)))) %>% 
+      select(num, den, nsig, medl2fc) %>%
+      mutate(maxdiffsizeF =  maxdiffsizeF)
+  #} else {
+    # otherwise, if sizeFactors too different, return NULL
+  #  res <- NULL
+  #}
+  return(res)
+}
+
+# Run DESeq and collect results for random simulations and actual data
+random <- future_map(rand_colData, get_degs)
+actual <- get_degs(actual_colData)
+
+
+# Bind results together
+res <- random %>% 
+  bind_rows(.id = "sim") %>%
+  bind_rows(random = ., actual = actual, .id = "colData")
+
+ressum <- res %>%
+  group_by(colData, sim) %>%
+  summarise(totsig = sum(nsig),
+            #maxdiffsizeF = unique(maxdiffsizeF),
+            maxmedl2fc = max(abs(medl2fc))) %>%#,
+            #totsigmean5 = sum(nsigmean5),
+            #totsigmean10 = sum(nsigmean10)) %>%
+  arrange(as.numeric(sim))
+
+#ggplot(ressum, aes(x = maxdiffsizeF, y = totsig, color = colData)) + geom_point()
+ggplot(ressum, aes(x = maxmedl2fc, y = totsig, color = colData)) + geom_point()
+#plot(pvals[1:100], filter(ressum, colData == "random")$totsig)
+```
+
+```{r}
+# Filter out maxmedl2fc > 0.5
+ressum %>%
+  filter(maxmedl2fc < 0.5) %>%
+  ggplot(aes(x = totsig, fill = colData)) +
+  geom_histogram()
+
+n.act <- ressum %>%
+  filter(colData == "actual") %>%
+  pluck("totsig")
+
+# Calculate p-value
+
+ressum %>%
+  filter(maxmedl2fc < 0.5) %>%
+  summarise(p = sum(totsig >= n.act)/n())
+
+```
+
+```{r new plot, eval = FALSE}
+ggplot(ressum, aes(x = totsig, fill = colData)) +
+  geom_histogram()
+actual %>% summarise(tot=sum(nsigmean3))
+sum(!random %>% map_lgl(is.null))
+sum(ressum$totsig <= 198)/100
+#sum(ressum$totsigmean5 <= 96)/nsim
+#sum(ressum$totsigmean10 <= 96)/nsim
+
+boxplot(log10(ressum$totsig))
+median(ressum$totsigmean10)
+
+res %>%
+  group_by(colData, sim) %>%
+  summarize(medmedl2fc = mean(abs(medl2fc)),
+            totsig = sum(nsigmean3)) %>%
+  ggplot(aes(x = medmedl2fc, y = totsig)) +
+  geom_point(aes(color = colData))
+```
+
+```{r, eval = FALSE}
+
+ressum %>%
+  filter(totsig == max(totsig))
+
+wtf <- rand_colData[!map_lgl(random, is.null)][[76]]
+save(wtf, file = "output/wtf.RData")
+
+# Count total and unique DEGs for sim20 and actual
+res %>%
+  filter(sim == 14)  %>%
+  mutate(nsig = map_dbl(res, ~ nrow(.[which(.$padj < 0.1 & .$baseMean > 10), ]))) %>%
+  mutate(whichsig = map(res, ~ rownames(.[which(.$padj < 0.1 & .$baseMean > 10), ]))) %>%
+  unnest(whichsig) %>%
+  summarise(tot = length(whichsig),
+            uniq = length(unique(whichsig)))
+
+actual %>%
+  mutate(nsig = map_dbl(res, ~ nrow(.[which(.$padj < 0.1 & .$baseMean > 10), ])))
+  
+
+
+r27 <-  res %>%
+  filter(sim == 30) %>%
+  pull(res)
+r27fc <- r27[[1]][which(r27[[1]]$padj < 0.1), ]
+hist(log(r27fc$baseMean), xlim=c(0,10), breaks = 500)
+range(abs(r27fc$baseMean))
+DESeq2::plotMA(r27[[1]])
+
+ract <- res %>%
+  filter(colData == "actual", num == "Ch", den == "Cc") %>%
+  pull(res)
+actfc <- ract[[1]][which(ract[[1]]$padj < 0.1), ]
+hist(abs(actfc$baseMean), xlim = c(0,100), breaks = 100)
+range(abs(actfc$baseMean))
+DESeq2::plotMA(ract[[1]])
+ract[[1]]$pvalue[ract[[1]]$baseMean < 5] <- NA
+
+gg <- p.adjust(ract[[1]]$pvalue, method="BH")
+
+
+## The sim with tons of DEGs has low overall baseMean of DEGs compared to actual data
+DESeq2::plotMA(r27[[1]])
+DESeq2::plotMA(ract[[1]])
+```
+
+```{r, eval = FALSE}
+DESeq2::plotMA(wtfdegs$dsr[[1]])
+```
+
+```{r, eval = FALSE}
+load("output/wtf.RData")
+wtf.dds <- hs.dds
+colData(wtf.dds) <- wtf
+
+wtf.dsr <- DESeq(wtf.dds, minmu = 0.5)
+wtf.res <- tibble(dsr = list(wtf.dsr)) %>%
+    expand_grid(group.contrasts) %>%
+    mutate(res = pmap(list(dsr, num, den), function(dsr, num, den) {
+        results(dsr, contrast = c("group", num, den))})) %>%
+    mutate(nsig = map_dbl(res, ~ nrow(data.frame(.[which(.$padj < 0.1 & .$baseMean > 3), ]))))
+wtf.res %>% summarise(tot = sum(nsig))   #1270
+
+DESeq2::plotMA(wtf.res$res[[4]])
+median(wtf.res$res[[4]]$log2FoldChange)  # median l2fc is well above zero
+# looks like median baseMean of upreg genes much lower than median downreg genes...
+ff <- data.frame(wtf.res$res[[4]])
+ff %>%
+  filter(log2FoldChange < 0)  %>%
+  summarise(med = median(log(baseMean)))
+plot(log2FoldChange ~ log(baseMean), data = ff, ylim=  c(-5,5))
+
+gr_sizeF <- tibble(group = colData(wtf.dds)$group,
+                   sizeF = sizeFactors(wtf.dsr))
+
+gr_sizeF %>%
+  group_by(group) %>%
+  summarise(mean = mean(log(sizeF)))
+
+gr_sizeF %>% ggplot(aes(x = group, y = log(sizeF))) +
+  geom_point()
+  
+anova(lm(log(sizeF) ~ group, data = gr_sizeF))
+
+# Largest difference between log(sizeF) among groups is 0.418(Dc)-(-0.416(Dh)) = 0.834. This is also the contrast with the most DE genes. Does diff in group sizeFactors lead to lots of  DEGs between groups?
+
+colData(hs.dds) <- actual_colData
+act.dsr <- DESeq(hs.dds, minmu = 0.5)
+act.res <- tibble(dsr = list(act.dsr)) %>%
+    expand_grid(group.contrasts) %>%
+    mutate(res = pmap(list(dsr, num, den), function(dsr, num, den) {
+        results(dsr, contrast = c("group", num, den))})) %>%
+    mutate(nsig = map_dbl(res, ~ nrow(data.frame(.[which(.$padj < 0.1 & .$baseMean > 3), ]))))
+act.res %>% summarise(tot = sum(nsig)) 
+
+DESeq2::plotMA(act.res$res[[3]])
+median(act.res$res[[6]]$log2FoldChange)
+
+gr_sizeF <- tibble(group = colData(hs.dds)$group,
+                   sizeF = sizeFactors(act.dsr))
+
+
+
+gr_sizeF %>%
+  group_by(group) %>%
+  summarise(mean = mean(log(sizeF)))
+
+gr_sizeF %>%
+  ggplot(aes(x = group, y = log(sizeF))) +
+  geom_point()
+
+```
+
+
+# EuKaryotic Orthologous Groups (KOG) enrichment analysis
+
+Using the signed log(p-values) from the differential expression analysis, we can analyze which KOG classifications are up- or down-regulated within each colony, and across all three colonies together.
+
+```{r KOG, results = 'hide', eval = FALSE}
+# Import KOG annotations for Mcavernosa genome # Downloaded from M. Studivan github
+gene2kog <- read.table("data/genome/Mcavernosa_iso2kog.tab", sep = "\t") %>% 
+   filter(!V2 == "")
+
+# Run KOG.MWU analysis on all contrasts
+KOG <- res %>%
+  mutate(KOG = map(logP, ~ kog.mwu(., gene2kog)),
+         # If a KOG term has <10 genes associated with it, set delta rank to zero
+         KOG = map(KOG, ~ mutate(., delta.rank = ifelse(nseqs < 10, 0, delta.rank))))
+
+# count sig kog categories
+kogsig <- KOG %>%
+  mutate(nsigKOG = map_dbl(KOG, ~ sum(.$padj < 0.1)))
+
+
+ggplot(kogsig, aes(x = nsigKOG)) +
+  geom_histogram() +
+  facet_wrap(~num + den)# +
+  #geom_histogram(data = actual, color = "red")
+
+
+```
+
+##### Plot cross-colony KOG results for each contrast
+
+```{r plot_KOG_avg, eval = FALSE}
+kogtables <- KOG %>%
+  unnest(KOG) %>%
+  select(sim, num, den, term, delta.rank) %>%
+  nest(data = c(num, den, term, delta.rank)) %>%
+  mutate(mat = map(data, ~ pivot_wider(., names_from = c(num,den), values_from = delta.rank, names_sep = ".")))
+
+
+```
+
+Test similarity of transcriptome responses to different conditions by correlation of KOG delta-ranks
+```{r KOG_correlations, eval = FALSE}
+# Visualize KOG response correlations between different contrasts
+#GGally::ggpairs(kogtables$mat[[5]][,-1], lower = list(continuous = "smooth"), diag = NULL)
+
+# Test whether correlation coefficients are greater than 0.5 (null hypothesis when comparing ratios with common denominator) or 0 (when ratios contain all different variables)
+comparisons <- c("~ Ch.Cc + Dc.Cc", "~ Ch.Cc + Dc.Ch", "~ Ch.Cc + Dh.Cc", "~ Ch.Cc + Dh.Ch", "~ Ch.Cc + Dh.Dc",
+                 "~ Dc.Cc + Dc.Ch", "~ Dc.Cc + Dh.Cc", "~ Dc.Cc + Dh.Ch", "~ Dc.Cc + Dh.Dc",
+                 "~ Dc.Ch + Dh.Cc", "~ Dc.Ch + Dh.Ch", "~ Dc.Ch + Dh.Dc",
+                 "~ Dh.Cc + Dh.Ch", "~ Dh.Cc + Dh.Dc",
+                 "~ Dh.Ch + Dh.Dc")
+
+nsigcor <- function(kogtable) {
+  corres <- tibble(comparison = comparisons) %>%
+  filter(!grepl("Dc.Ch|Cc.Dh|Dh.Cc", comparison)) %>%
+  mutate(cor = map(comparison, ~ cor.test(as.formula(.), data = kogtable[,-1]) %>% broom::tidy())) %>%
+  unnest() %>%
+  select(comparison, estimate, conf.low, conf.high) %>%
+  mutate(samevars = map_lgl(comparison, ~ any(table(str_extract_all(., "C.|D.")) > 1)),
+         nocor = pmap_lgl(list(samevars, conf.low, conf.high), function(x, y, z) {
+           ifelse(x, !(y > 0.5 | z < -0.5), between(0, y, z))}))
+sum(!corres$nocor)
+}
+
+cordf <- kogtables %>%
+  mutate(ncor = map_dbl(mat, nsigcor))
+
+ggplot(cordf, aes(x = ncor)) +
+  geom_histogram()
+
+
+```
+
