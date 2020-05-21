@@ -534,8 +534,10 @@ dek
 #save_kable(dek, file = "output/Table1.html")
 ```
 
-##### Assess similarity of responses across colonies
+
+##### Assess similarity of responses across colonies and contrasts
 ```{r DEgenes_comparison}
+# Find genes that are DE in same direction in multiple colonies when analyzed individually
 DE %>%
   unnest(sig) %>%
   filter(colony != "all") %>%
@@ -546,6 +548,55 @@ DE %>%
 ```
 
 In terms of the specific genes differentially expressed, each colony shows a very different response. There are ZERO differentially expressed genes in common across all three colonies when analyzed individually. However, we still find some differentially expressed genes in common when the colonies are analyzed together, likely due to higher statistical power.
+
+```{r}
+# Find DEGs in common between Ch.Cc and Dc.Cc (same response when heated and when shuffled to D)
+genesincommon <- DE %>%
+  unite("contrast", num, den, sep = ".") %>%
+  filter(colony == "all", contrast %in% c("Ch.Cc", "Dc.Cc")) %>%
+  unnest(sig) %>%
+  select(contrast, gene, log2FoldChange) %>%
+  pivot_wider(names_from = contrast, values_from = log2FoldChange) %>%
+  drop_na() %>%
+  arrange(Ch.Cc) %>%
+  mutate(gene = factor(gene, levels = gene))
+  
+# Get normalized counts for the genes in common
+gcounts <- data.frame(vsd2[which(rownames(vsd2) %in% genesincommon$gene), ])
+gcounts <- rownames_to_column(gcounts, var = "gene") %>%
+  pivot_longer(-gene, names_to = "sample", values_to = "count") %>%
+  left_join(select(sdat0, sample, group)) %>%
+  mutate(gene = factor(gene, levels = levels(genesincommon$gene))) %>%
+  filter(group != "Dh")
+
+# Get group log2foldchanges for plotting
+gl2fc <- genesincommon %>%
+  pivot_longer(-gene, names_to = "group", values_to = "l2fc") %>%
+  mutate(group = str_sub(group, 1, 2))
+# Get group means for plotting
+gcountsmean <- gcounts %>%
+  group_by(gene, group) %>%
+  summarise(count = mean(count))
+
+# Plot
+gcounts %>%
+  ggplot(aes(x = group, y = pmax(0,log(count)))) +
+  geom_jitter(width = 0.2, aes(color = group)) +
+  geom_line(data = gcountsmean, aes(group = gene)) +
+  geom_text(data = gl2fc, aes(y = 2.4, label = round(l2fc, 2))) +
+  facet_wrap(~ gene) +
+  theme_custom() +
+  theme(legend.position = "none") +
+  labs(x = "", y = "log(Variance stabilized counts)") +
+  scale_y_continuous(limits = c(0, 2.6))
+
+# Table with annotations
+# Get gene annotations for plotting
+ganno <- left_join(genesincommon, mutate(trinotate, gene = `#gene_id`))
+write_tsv(ganno, path = "output/geneanno.tsv")
+```
+
+These 8 genes are significantly differentially expressed across all colonies in C corals when heated (Ch vs. Cc) and when shuffled to D (Dc vs. Cc).
 
 # Gene Ontology enrichment analysis
 
@@ -925,6 +976,7 @@ comparisons <- c("~ Ch.Cc + Dc.Cc", "~ Ch.Cc + Dc.Ch", "~ Ch.Cc + Dh.Cc", "~ Ch.
                  "~ Dh.Ch + Dh.Dc")
 
 tibble(comparison = comparisons) %>%
+  filter(!grepl("Dc.Ch|Cc.Dh|Dh.Cc", comparison)) %>%
   mutate(cor = map(comparison, ~ cor.test(as.formula(.), data = kogtable2) %>% broom::tidy())) %>%
   unnest() %>%
   select(comparison, estimate, conf.low, conf.high) %>%
