@@ -76,13 +76,15 @@ counts <- counts[, order(colnames(counts))]
 ##### Sample metadata
 ```{r sample_metadata}
 # Import sample metadata
-sdat <- read_xlsx("data/sample_metadata.xlsx") %>%
+sdat0 <- read_xlsx("data/sample_metadata.xlsx") %>%
   mutate(sym = recode(trt1, b = "D", c = "C"),
          sample = paste0(species, colony, ".", core),
          group = paste(sym, trt2, sep = ""),
          colony = factor(colony),
          colony.group = interaction(colony, group)) %>%
-  mutate_if(is.character, as.factor) %>%
+  mutate_if(is.character, as.factor)
+
+sdat <- sdat0 %>%
   arrange(sample) %>%                              # order rows by sample name
   column_to_rownames(var = "sample")               # set sample name to rownames
 ```
@@ -211,6 +213,10 @@ mds <- mds %>%
   dplyr::summarise(c1 = mean(`1`), c2 = mean(`2`)) %>%    
   full_join(mds)
 
+# Calculate variance explained by each PC
+MDS <- cmdscale(sampleDistMatrix, eig = TRUE)
+vexpl <- round(MDS$eig*100/sum(MDS$eig),1)[1:2]
+
 # Plot with spiders
 pcoa <- ggplot(mds, aes(color = genet, shape = sym)) +
   geom_segment(mapping = aes(x = `1`, y = `2`, xend = c1, yend = c2),
@@ -223,7 +229,7 @@ pcoa <- ggplot(mds, aes(color = genet, shape = sym)) +
   scale_alpha_manual(values = c(1, 0), name = "temp", labels = c("control", "heated")) +
   guides(shape = guide_legend(order = 2, override.aes = list(fill = "black"))) +
   guides(alpha = guide_legend(override.aes = list(shape = 21, alpha = 1, fill = c("black", "white")))) +
-  labs(x = "PC1", y = "PC2") +
+  labs(x = paste0("PC1 [", vexpl[1],"%]"), y = paste0("PC2 [", vexpl[2],"%]")) +
   theme_custom() +
   theme(legend.spacing.y = unit(0, "cm"))
 
@@ -234,10 +240,10 @@ ggsave(filename = "output/pcoa.png", pcoa, width = 109, height = 84.5, units = "
 
 The PCoA shows that global gene expression varies significantly by colony along PC2. Within colonies 20 (red) and 26 (blue), samples cluster mostly by symbiont type along PC1, with less (but still some) separation between control corals and heated corals along both PC1 and/or PC2. Colony 26 shows the most pronounced differences between corals with C and corals with D along PC1. Interestingly, the effects of symbiont type on colonies 20 and 26 are in opposite directions along PC1. Conversely, samples of colony 26 separate mostly by heat treatment, with little to no effect of symbiont on global gene expression. This suggests each colony is responding differently to symbiont and heat treatments.
 
-# Variance partitioning
+## Variance partitioning
 
 Partition total transcriptome variance among explanatory factors (symbiont, heating, and their interaction) for each colony. Based on the PCoA above, it appears that symbiont type should explain the most variance in colony 26, and very little variance in colony 22. Heating should explain more variance in colony 22.
-```{r varpart_col, eval = TRUE, results = 'hide'}
+```{r varpart_col, eval = FALSE, results = 'hide'}
 # Get sample data for heat stress experiment into tibble
 coldata <- sdat %>%
   rownames_to_column("sample") %>%
@@ -286,7 +292,7 @@ weighted.mean(all$vp[[3]]$sym, w = rowSums(assay(all$vsd[[3]])))
 ```
 
 Plot sources of variance for each colony
-```{r plot_varpart, eval = TRUE}
+```{r plot_varpart, eval = FALSE}
 varpartfig <- allsumm %>% 
   unnest(vpsum, .drop = T) %>%
   gather(source, value, -colony) %>%
@@ -322,8 +328,8 @@ allsumm %>%
 ```
 
 
-#### Discriminant analysis of principal components (DAPC)
-```{r DAPC}
+## Discriminant analysis of principal components (DAPC)
+```{r DAPC, eval = FALSE}
 # Discriminant function including all genes
 vsd2 <- limma::removeBatchEffect(assay(vsd), vsd$colony)
 # use batch-colony-removed vst counts
@@ -367,6 +373,7 @@ dapc <- dapc %>%
   summarize(c1 = mean(LD1),
             c2 = mean(LD2)) %>%
   full_join(dapc)
+ggplot(dapc, aes(x = LD1, y = LD2, color = grp)) + geom_point()
 
 # Plot with spiders
 dapc.fig <- 
@@ -496,6 +503,7 @@ DE <- crossing(colony = "all", group.contrasts) %>%
   mutate(dsr = map2(num, den, ~ results(dsr2, contrast = c("group", .x, .y)))) %>%
   bind_rows(DE)
 ```
+
 
 ##### Get significantely DE genes
 ```{r get_DEgenes}
