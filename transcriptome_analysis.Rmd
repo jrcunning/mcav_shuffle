@@ -1,15 +1,20 @@
 ---
 title: "*M. cavernosa* transcriptome analysis"
+author: Ross Cunning
+date: "`r format(Sys.time(), '%B %d, %Y')`"
 output:
   html_document:
-    code_folding: hide
+    toc: true
+    toc_float: true
 ---
 
-```{r setup, include=FALSE}
+# Setup
+
+```{r setup, include = TRUE}
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, cache = TRUE)
 ```
 
-```{r load_libraries, include = FALSE}
+```{r load_libraries, include = TRUE}
 # Load libraries
 library(DESeq2)    # BiocManager::install('DESeq2')
 library(limma)     # BiocManager::install('limma')
@@ -25,6 +30,7 @@ library(tidyverse)
 library(KOGMWU)  # install.packages("KOGMWU")
 library(adegenet)
 library(ggpubr)
+library(kableExtra)
 
 ## ggplot theme
 theme_custom <- function() {
@@ -62,7 +68,7 @@ global_labeller <- labeller(
 
 # Load data
 
-##### Gene count data
+#### Gene count data
 ```{r import_counts}
 # Import gene expression / count data
 counts <- read.table("data/tagseq/processed/counts_newpars.txt", 
@@ -73,7 +79,7 @@ colnames(counts) <- str_sub(colnames(counts), 1, 7)
 counts <- counts[, order(colnames(counts))]
 ```
 
-##### Sample metadata
+#### Sample metadata
 ```{r sample_metadata}
 # Import sample metadata
 sdat0 <- read_xlsx("data/sample_metadata.xlsx") %>%
@@ -89,13 +95,13 @@ sdat <- sdat0 %>%
   column_to_rownames(var = "sample")               # set sample name to rownames
 ```
 
-##### Gene annotations
+#### Gene annotations
 ```{r import_annot}
 trinotate <- readxl::read_xlsx("data/genome/Mcavernosa_trinotate_annotation_report.xlsx",
                                 sheet = "Mcavernosa_trinotate_annotation")
 ```
 
-#### Create DESeqDataSet
+### Create DESeqDataSet
 ```{r subset_dds}
 # Create full DESeqDataSet
 dds <- DESeqDataSetFromMatrix(countData = counts,
@@ -116,7 +122,7 @@ hs.dds <- hs.dds[ rowSums(counts(hs.dds)) > 0, ]
 colData(hs.dds) <- droplevels(colData(hs.dds))
 ```
 
-#### Summarize count data
+### Summarize count data
 ```{r summarize_counts, fig.height = 4, fig.width = 10}
 # Read in count totals of raw, postQC, and mapped reads
 count_summ <- read.table("data/tagseq/processed/count_totals_newpars.txt") %>%
@@ -173,7 +179,7 @@ countfig
 
 # Save table and fig to include in supplemental information
 write_csv(counttable, path = "output/readcounttable.csv")
-ggsave(countfig, filename = "output/countfig.png", device = "png", width = 150, height = 85, units = "mm")
+ggsave(countfig, filename = "figures/FigS3.png", device = "png", width = 150, height = 85, units = "mm")
 ```
 
 #### Filter and transform count data
@@ -192,9 +198,10 @@ hs.dds <- hs.dds[ rowMeans(counts(hs.dds)) > 1, ]
 vsd <- vst(hs.dds, blind = TRUE)
 ```
 
-# Visualize global gene expression
+# Visualize transcriptome
 
-#### Principal Coordinate Analysis (PCoA)
+### Principal Coordinates Analysis
+
 ```{r pcoa, eval = TRUE}
 ## Calculate distances among samples
 sampleDists <- dist(t(assay(vsd)), method = "manhattan")
@@ -240,7 +247,7 @@ ggsave(filename = "output/pcoa.png", pcoa, width = 109, height = 84.5, units = "
 
 The PCoA shows that global gene expression varies significantly by colony along PC2. Within colonies 20 (red) and 26 (blue), samples cluster mostly by symbiont type along PC1, with less (but still some) separation between control corals and heated corals along both PC1 and/or PC2. Colony 26 shows the most pronounced differences between corals with C and corals with D along PC1. Interestingly, the effects of symbiont type on colonies 20 and 26 are in opposite directions along PC1. Conversely, samples of colony 26 separate mostly by heat treatment, with little to no effect of symbiont on global gene expression. This suggests each colony is responding differently to symbiont and heat treatments.
 
-## Variance partitioning
+### Variance partitioning
 
 Partition total transcriptome variance among explanatory factors (symbiont, heating, and their interaction) for each colony. Based on the PCoA above, it appears that symbiont type should explain the most variance in colony 26, and very little variance in colony 22. Heating should explain more variance in colony 22.
 ```{r varpart_col, eval = FALSE, results = 'hide'}
@@ -328,8 +335,9 @@ allsumm %>%
 ```
 
 
-## Discriminant analysis of principal components (DAPC)
-```{r DAPC, eval = FALSE}
+### Discriminant Analysis
+Discriminant Analysis of Principal Components (DAPC)
+```{r DAPC, eval = TRUE}
 # Discriminant function including all genes
 vsd2 <- limma::removeBatchEffect(assay(vsd), vsd$colony)
 # use batch-colony-removed vst counts
@@ -418,63 +426,11 @@ ggsave(filename = "figures/fig3.png", plot = fig3, width = 80, height = 80, unit
 
 The DAPC shows that despite the significant variability among colonies, the four treatment groups can be discriminated well based on gene expression data. The first discriminant function (x-axis) represents the effect of heat stress in general, with control temperature corals to the left and heated corals to the right. Along this axis, D-control corals are intermediate between C-control corals and heated corals, showing that the presence of D shifts the transcriptional state toward the heat-stressed state. The second discriminant function (y-axis) separates the distinct responses to heat stress that occur in C vs. D corals.
 
-```{r, include = FALSE, eval = FALSE}
-# DAPC - axis of heat stress in C corals (Ccontrol vs. Cheat), then see where D's fall along it (sensu Kenkel and Matz)
-
-# use batch-colony-removed vst counts
-vsd2 <- vsd
-#assay(vsd2) <- limma::removeBatchEffect(assay(vsd), vsd$colony)
-## Subset C-control and C-heat corals
-CcCh <- vsd2[, colData(vsd2)$group %in% c("Cc", "Ch")]
-dat <- data.frame(assay(CcCh))
-
-# Fit DAPC axis
-dp1 <- dapc(t(dat), colData(CcCh)$group, n.pca = 12, n.da = 1)
-scatter(dp1, scree.pca = T)
-
-# Calculate values along this axis
-## Subset D-control and D-heat corals
-DcDh <- vsd2[, colData(vsd2)$group %in% c("Dc", "Dh")]
-dat2 <- data.frame(assay(DcDh))
-## Get scores for these samples along the Cc-Ch DAPC axis
-pred.sup <- predict.dapc(dp1, newdata=(t(dat2)))
-
-# Create dapc object to plot new scores
-newdp <- dp1
-newdp$ind.coord<-pred.sup$ind.scores
-newdp$posterior<-pred.sup$posterior
-newdp$assign<-pred.sup$assign
-newdp$grp <- colData(DcDh)$group
-scatter(newdp)
-
-# Get scores for all groups
-dpc <- tibble(group = c(as.character(dp1$grp), as.character(newdp$grp)),
-              core = c(rownames(dp1$ind.coord), rownames(newdp$ind.coord)),
-              colony = str_sub(core, 3, 4),
-              score = c(dp1$ind.coord, newdp$ind.coord))
-ggplot(dpc, aes(x = score, fill = group)) + geom_density(adjust = 1, alpha = 0.5)
-ggplot(dpc, aes(x = group, y = score, shape = colony, color = colony)) + geom_point()
-
-# Test for differences between groups
-mod <- lm(score ~ group, data = dpc)
-anova(mod)
-lsm <- lsmeans(mod, specs = "group")
-contrast(lsm, "pairwise")
-
-# Ccontrol -- -1.94
-# Cheat ---    1.94    (diff = 3.89)
-# Dcontrol -- -0.16
-
-
-# I deemed this approach inappropriate because we shouldn't necessarily constrain the responses of D corals to occur along an axis of heat stress for C corals... they could respond in an entirely different way along an entirely different axis. Therefore, the DAPC with all four groups is more appropriate. LD1 still ends up corresponding very strongly to the axis of heat stress for C corals, and we still C that shuffling to D moves corals toward the heat stress end of the axis. We can still do a statistical test on LD1 values for different groups. 
-```
-
-
-# Differential expression (DE) analysis
+# Differential expression analysis
 
 Since colonies appear to respond differently to symbiont type and heating, we should analyze differential expression in each colony separately to assess their unique responses. We can also analyze differential expression across all colonies together to see what responses are common to all three.
 
-##### Run DESeq analysis
+### Run DESeq
 
 First, within each colony
 ```{r run_DESeq_colonies, warning=FALSE}
@@ -505,7 +461,7 @@ DE <- crossing(colony = "all", group.contrasts) %>%
 ```
 
 
-##### Get significantely DE genes
+### Get significant DEGs
 ```{r get_DEgenes}
 DE <- DE %>%
   mutate(sig = map(dsr, ~ rownames_to_column(data.frame(.[which(.$padj < 0.1), ]), "gene")),
@@ -531,9 +487,6 @@ DEtab <- DE %>%
   select(genet, num, den, `DEGs [up, down]`) %>%
   spread(genet, `DEGs [up, down]`)
 
-
-knitr::kable(DEtab, caption = "Number of differentially expressed genes within individual genets and across all genets for each specified contrast. DEGs identified using DESeq with an adjusted p-value < 0.1. In brackets are the numbers of significantly up- and down-regulated genes.")
-
 rownames(DEtab) <- c("C~H~ vs. C~C~", "D~C~ vs. C~C~", "D~H~ vs. C~H~", "D~H~ vs. D~C~")
 dek <- DEtab %>% select(3:6) %>%
   knitr::kable(format = "markdown", caption = "Number of differentially expressed genes within individual genets and across all genets for each specified contrast. DEGs identified using DESeq with an adjusted p-value < 0.1. In brackets are the numbers of significantly up- and down-regulated genes.")
@@ -543,20 +496,25 @@ dek
 ```
 
 
-##### Assess similarity of responses across colonies and contrasts
+### DEG Similarities
+Similarity of differentially expressed genes across genets and contrasts
+
+##### DEGs in common across genets
 ```{r DEgenes_comparison}
-# Find genes that are DE in same direction in multiple colonies when analyzed individually
+# Find genes that are DE in same direction in multiple genets when analyzed individually
 DE %>%
   unnest(sig) %>%
   filter(colony != "all") %>%
   group_by(num, den) %>%
-  count(gene, log2FoldChange > 0) %>%   # In how many colonies is same gene DE in same direction?
-  summarise(`1 colony` = sum(n==1), `2 colonies` = sum(n==2), `3 colonies` = sum(n==3)) %>%
-  knitr::kable(caption = "Number of differentially expressed genes in common") 
+  count(gene, log2FoldChange > 0) %>%   # In how many genets is same gene DE in same direction?
+  summarise(`1 genet` = sum(n==1), `2 genets` = sum(n==2), `3 genets` = sum(n==3)) %>%
+  knitr::kable(caption = "Number of differentially expressed genes in common")  %>%
+  kable_styling(full_width = TRUE)
 ```
 
 In terms of the specific genes differentially expressed, each colony shows a very different response. There are ZERO differentially expressed genes in common across all three colonies when analyzed individually. However, we still find some differentially expressed genes in common when the colonies are analyzed together, likely due to higher statistical power.
 
+##### DEGs in common beteween heated and shuffled corals
 ```{r}
 # Find DEGs in common between Ch.Cc and Dc.Cc (same response when heated and when shuffled to D)
 genesincommon <- DE %>%
@@ -587,7 +545,7 @@ gcountsmean <- gcounts %>%
   summarise(count = mean(count))
 
 # Plot
-gcounts %>%
+plotgcounts <- gcounts %>%
   ggplot(aes(x = group, y = pmax(0,log(count)))) +
   geom_jitter(width = 0.2, aes(color = group)) +
   geom_line(data = gcountsmean, aes(group = gene)) +
@@ -597,19 +555,37 @@ gcounts %>%
   theme(legend.position = "none") +
   labs(x = "", y = "log(Variance stabilized counts)") +
   scale_y_continuous(limits = c(0, 2.6))
+plotgcounts
+
+ggsave(file = "figures/FigS9.png", width = 160, height = 160, units = "mm")
 
 # Table with annotations
 # Get gene annotations for plotting
 ganno <- left_join(genesincommon, mutate(trinotate, gene = `#gene_id`))
 write_tsv(ganno, path = "output/geneanno.tsv")
+
+# Print table
+ganno <- ganno %>%
+  select(gene, sprot_Top_BLASTP_hit, gene_ontology_blast)
+
+# Replace some  delimiter characters that disrupt HTML parsing
+ganno <- mutate_if(ganno, is.character, str_replace_all, pattern = "\\^", replacement = "\\\\")
+ganno <- mutate_if(ganno, is.character, str_replace_all, pattern = "\\`", replacement = "||||")
+
+# Print table
+knitr::kable(ganno) %>% 
+  kable_styling("striped") %>% 
+  column_spec(1:3, width_max = "50em") %>% 
+  scroll_box(height = "50em", width = "100%")
+
 ```
 
 These 8 genes are significantly differentially expressed across all colonies in C corals when heated (Ch vs. Cc) and when shuffled to D (Dc vs. Cc).
 
-# Gene Ontology enrichment analysis
+# GO enrichment analysis
 
-### D-control vs. C-control
-```{r Dctrl.Cctrl, eval = TRUE}
+### D~Control~ vs. C~Control~
+```{r Dctrl.Cctrl, eval = FALSE}
 setwd("code/GO_MWU")
 
 # Write all-colony D-control vs. C-control logP values to file for GO_MWU analysis
@@ -671,8 +647,8 @@ Dctrl.Cctrl.GO %>%
 #   goDivision = "CC", goAnnotations = "Mcavernosa_gene2go.txt")
 ```
 
-### C-heat vs. C-control
-```{r Cheat.Cctrl, eval = TRUE}
+### C~Heat~ vs. C~Ccontrol~
+```{r Cheat.Cctrl, eval = FALSE}
 setwd("code/GO_MWU")
 
 # Write all-colony C-heat vs. C-control logP values to file for GO_MWU analysis
@@ -729,8 +705,8 @@ Cheat.Cctrl.GO %>%
   knitr::kable()
 ```
 
-### D-heat vs. D-control
-```{r Dheat.Dctrl, eval = TRUE}
+### D~Heat~ vs. D~Control~
+```{r Dheat.Dctrl, eval = FALSE}
 setwd("code/GO_MWU")
 
 # Write all-colony D-heat vs. D-control logP values to file for GO_MWU analysis
@@ -787,9 +763,9 @@ Dheat.Dctrl.GO %>%
   knitr::kable()
 ```
 
-### C-heat vs. D-heat
+### C~Heat~ vs. D~Heat~
 
-```{r Dheat.Cheat}
+```{r Dheat.Cheat, eval = FALSE}
 setwd("code/GO_MWU")
 
 # Write all-colony D-heat vs. C-heat logP values to file for GO_MWU analysis
@@ -840,7 +816,7 @@ allGO <- bind_rows(.id = "contrast",
 write_csv(allGO, path = "output/allGO.csv")
 ```
 
-# EuKaryotic Orthologous Groups (KOG) enrichment analysis
+# KOG enrichment analysis
 
 Using the signed log(p-values) from the differential expression analysis, we can analyze which KOG classifications are up- or down-regulated within each colony, and across all three colonies together.
 
@@ -884,7 +860,7 @@ kogpvals <- KOG %>%
 
 ```
 
-##### Plot KOG results for each colony for each contrast
+### KOG results for each genet
 ```{r plot_KOG}
 # Function to plot KOG delta ranks heatmap
 KOGheatmap <- function(deltaranks, pvals, ...) {
@@ -903,19 +879,19 @@ KOGheatmap <- function(deltaranks, pvals, ...) {
 
 KOGDcCc <- KOGheatmap(kogtables$Dc.Cc, kogpvals$Dc.Cc, main = "                     D-control vs. C-control", 
                       fontsize = 8)
-ggsave(filename = "figures/FigS2.png", plot = KOGDcCc, width = 112, height = 84.5, units = "mm")
+ggsave(filename = "figures/FigS5.png", plot = KOGDcCc, width = 112, height = 84.5, units = "mm")
 KOGChCc <- KOGheatmap(kogtables$Ch.Cc, kogpvals$Ch.Cc, main = "                     C-heated vs. C-control",
                       fontsize = 8)
-ggsave(filename = "figures/FigS3.png", plot = KOGChCc, width = 112, height = 84.5, units = "mm")
+ggsave(filename = "figures/FigS6.png", plot = KOGChCc, width = 112, height = 84.5, units = "mm")
 KOGDhDc <- KOGheatmap(kogtables$Dh.Dc, kogpvals$Dh.Dc, main = "                     D-heated vs. D-control",
                       fontsize = 8)
-ggsave(filename = "figures/FigS4.png", plot = KOGDhDc, width = 112, height = 84.5, units = "mm")
+ggsave(filename = "figures/FigS7.png", plot = KOGDhDc, width = 112, height = 84.5, units = "mm")
 KOGDhCh <- KOGheatmap(kogtables$Dh.Ch, kogpvals$Dh.Ch, main = "                     D-heated vs. C-heated",
                       fontsize = 8)
-ggsave(filename = "figures/FigS5.png", plot = KOGDhCh, width = 112, height = 84.5, units = "mm")
+ggsave(filename = "figures/FigS8.png", plot = KOGDhCh, width = 112, height = 84.5, units = "mm")
 ```
 
-##### Plot cross-colony KOG results for each contrast
+### KOG results across all genets
 
 ```{r plot_KOG_avg}
 kogtable2 <- KOG %>%
@@ -947,31 +923,42 @@ fig4a <- KOGheatmap(
   fontsize = 8)
 
 ggsave(filename = "figures/fig4a.png", fig4a, width = 112, height = 84.5, units = "mm")
+```
 
-# Get number of genes DE p<0.05 associated with each KOG term
+### Count DEGs for each KOG
+```{r koggenecounts}
+# Get number of genes DE (unadjusted p<0.05) associated with each KOG term (this is default behavior of KOG_MWU in its plotting function)
 kogout <- KOG %>%
   unnest(KOG) %>%
   filter(colony == "all") %>%
   unite("contrast", num, den, sep = ".") %>%
   select(contrast, dsr, term, nseqs, delta.rank, padj) %>%
-  filter(contrast %in%  c("Ch.Cc", "Dh.Dc", "Dc.Cc", "Dh.Ch"))
+  filter(contrast %in% c("Ch.Cc", "Dh.Dc", "Dc.Cc", "Dh.Ch"))
 
 kogout <- kogout %>%
   mutate(nsig = map2_dbl(term, dsr, function(.x, .y) {
-    geneswithterm <- filter(gene2kog, V2 == .x) %>% pull(V1)
+    geneswithterm <- dplyr::filter(gene2kog, V2 == as.character(.x)) %>% pull(V1)
     geneswithp <- rownames_to_column(data.frame(.y[which(.y$pvalue < 0.05), ]), "gene")
     return(length(intersect(geneswithterm, geneswithp$gene)))
   }))
 
 # Write table for supp info
-kogout %>%
+kogout <- kogout %>%
   filter(padj < 0.1) %>%
   unite("genes", nsig, nseqs, sep = "/") %>%
   select(contrast, genes, term, delta.rank, padj) %>%
-  write_tsv("output/kogout.txt")
+  mutate(padj = signif(padj, digits = 3))
+
+write_tsv(kogout, "output/kogout.txt")
+
+knitr::kable(kogout)  %>%
+  kable_styling(full_width = TRUE)
 ```
 
-## Correlation of KOG delta-ranks: testing similarity of transcriptome responses
+### Correlation of KOG delta-ranks
+
+Testing similarity of transcriptome responses
+
 ```{r KOG_correlations}
 # Visualize KOG response correlations between different contrasts
 GGally::ggpairs(kogtable2, lower = list(continuous = "smooth"), diag = NULL)
@@ -1016,7 +1003,7 @@ fig4b <- kogtable2 %>%
 ggsave(plot = last_plot(), filename = "figures/fig4b.png", width = 80, height = 120, units = "mm")
 ```
 
-```{r}
+```{r, eval = FALSE}
 # Combine KOG heatmap with KOG correlations into multi-panel figure
 grob4a = grid::grid.grabExpr(grid::grid.draw(fig4a)) 
 
@@ -1027,7 +1014,9 @@ ggsave(plot = fig4, filename = "figures/fig4.png", width = 169, height = 90, uni
 ```
 
 
-# Are DEGs associated with symbiont shuffling due to having changed symbionts, or having bleached?
+# No-shuffling controls
+
+Are DEGs associated with symbiont shuffling due to having changed symbionts, or having bleached?
 
 Other coral genotypes were bleached but did not shuffle their symbionts -- they had clade C to begin with, and clade C after recovery. We can use these samples as controls to test whether the change in gene expression in corals that shuffle is attributable to the symbiont change or the previous stress.
 
@@ -1070,251 +1059,9 @@ noshuffpcoa <- ggplot(mds, aes(x = `1`, y = `2`, color = trt1, shape = colony)) 
   geom_point() +
   scale_color_discrete(name = "Treatment", labels = c("Bleached and\nrecovered", "Control")) +
   scale_shape_discrete(name = "Genet") +
-  labs(x = "PC1", y = "PC2")
+  labs(x = "PC1", y = "PC2") +
+  theme_custom()
+noshuffpcoa
 
-ggsave(noshuffpcoa, file = "output/noshuffpcoa.png", width = 50, height = 50, units = "mm")
-```
-
-
-
-
-Code archive
-
-
-```{r, eval = F}
-df <- tibble(
-  DcCcl2fc = DE$dsr[[3]]$log2FoldChange,
-  ChCcl2fc = DE$dsr[[4]]$log2FoldChange,
-  DhDcl2fc = DE$dsr[[1]]$log2FoldChange
-)
-
-ggplot(df, aes(x = ChCcl2fc, y = DcCcl2fc)) +
-  geom_point() +
-  geom_smooth(method = "lm") +
-  stat_cor() +
-  geom_abline(slope = 1)
-
-ggplot(df, aes(x = ChCcl2fc, y = DhDcl2fc)) +
-  geom_point() +
-  geom_smooth(method = "lm") +
-  stat_cor()
-
-ggplot(df, aes(x = DhDcl2fc, y = -DcCcl2fc)) +
-  geom_point() +
-  geom_smooth(method = "lm") +
-  stat_cor()
-
-# Can we get normalized expression values instead of l2fc?
-DE$dsr[[1]]
-hs.dds
-design(hs.dds)
-results(hs.dds, contrast = )
-df <- tibble(
-  DcCcl2fc = DE$dsr[[3]]$log2FoldChange,
-  ChCcl2fc = DE$dsr[[4]]$log2FoldChange,
-  DhDcl2fc = DE$dsr[[1]]$log2FoldChange
-)
-```
-
-```{r, eval = F}
-# logic: if shuffling to D produces a response similar to heat stress in C
-###  e.g., Dc vs. Cc is similar to Ch. vs. Cc
-# does: shuffling to C produce a response similar to heat stress in D
-###  is    Cc vs. Dc similar to Dh vs. Dc?
-ggplot(df, aes(x = DhDcl2fc, y = -DcCcl2fc)) +
-  geom_point() +
-  geom_smooth(method = "lm") +
-  stat_cor() +
-  geom_abline(slope = 1)
-## yes.... this seems to undermine the entire story....?
-
-### But---is this artifact of using all genes?
-## If look at KOG delta ranks, it's not significant... (NEED TO CONFIRM THIS)
-
-
-
-
-# maker random numbers
-df <- tibble(
-  n1 = runif(20),
-  n2 = runif(20),
-  n3 = n2 + runif(20),
-   d = runif(20)
-)
-
-ggplot(df, aes(x = log(n1/d), y = log(n2/d))) +
-  geom_point() +
-  geom_smooth(method = "lm") +
-  stat_cor() +
-  geom_abline(slope =1, intercept = 0)
-
-ggplot(df, aes(x = n2, y = n3)) + geom_point()
-
-#### NEED TO TEST WHETHER R > 0.5.... 0.5 expected with common denominator for random data!!!
-
-
-```
-
-
-```{r, eval = FALSE}
-setwd("code/GO_MWU")
-#source("gomwu.functions.R")
-
-# Write colony 26 D-control vs. C-control logP values to file for GO_MWU analysis
-DE %>%
-  filter(colony == "26", num == "Dc", den == "Cc") %>%
-  unnest(logP) %>%
-  select(gene, logP) %>%
-  write.table(., file = "26.Dctrl.Cctrl.logP.txt", row.names = FALSE, quote = FALSE, sep = ",")
-
-# Run GO_MWU for colony 26 D-control vs. C-contol for Biological Process (BP) GO terms
-commandArgs <- function(...) c("26.Dctrl.Cctrl.logP.txt", "BP")
-source("GO_MWU.R")
-
-# Plot GO_MWU results for colony 26 D-control vs. C-contol for Biological Process (BP) GO terms
-#png(filename = "../../figures/26.Dheat.Dctrl.DE.GO.png", width = 140, height = 60, units = "mm", res = 300)
-par(xpd = NA)
-resultsBP <- gomwuPlot(inFile = "26.Dctrl.Cctrl.logP.txt",
-                       goAnnotations = "Mcavernosa_gene2go.txt",
-                       goDivision = "BP",
-                       level1 = 0.25, level2 = 0.1, level3 = 0.01, txtsize = 1.2, treeHeight = 0.5)
-#dev.off()
-```
-
-
-
-```{r, eval = FALSE}
-# WGCNA
-
-library(WGCNA)  # BiocManager::install("WGCNA")
-
-# Get only genes that are DE in any contrast
-DEgenes <- DE %>% 
-  unnest(sig) %>%
-  distinct(gene)
-
-DEvsd <- assay(vsd)[DEgenes$gene, ]
-
-# Choose a set of soft-thresholding powers
-powers = c(c(1:15))
-# Call the network topology analysis function
-sft = pickSoftThreshold(t(DEvsd), powerVector = powers, verbose = 5)
-# Plot the results:
-par(mfrow = c(1,2));
-cex1 = 0.9;
-# Scale-free topology fit index as a function of the soft-thresholding power
-plot(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],
-xlab="Soft Threshold (power)",ylab="Scale Free Topology Model Fit,signed R^2",type="n",
-main = paste("Scale independence"));
-text(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],
-labels=powers,cex=cex1,col="red");
-# this line corresponds to using an R^2 cut-off of h
-abline(h=0.90,col="red")
-# Mean connectivity as a function of the soft-thresholding power
-plot(sft$fitIndices[,1], sft$fitIndices[,5],
-xlab="Soft Threshold (power)",ylab="Mean Connectivity", type="n",
-main = paste("Mean connectivity"))
-text(sft$fitIndices[,1], sft$fitIndices[,5], labels=powers, cex=cex1,col="red")
-
-
-
-
-net = blockwiseModules(t(DEvsd), power = 7,
-                       TOMType = "unsigned", minModuleSize = 15,
-                       reassignThreshold = 0, mergeCutHeight = 0.25,
-                       numericLabels = TRUE, pamRespectsDendro = FALSE,
-                       saveTOMs = TRUE,
-                       saveTOMFileBase = "femaleMouseTOM",
-                       verbose = 3)
-
-table(net$colors)
-
-# Convert labels to colors for plotting
-mergedColors = labels2colors(net$colors)
-# Plot the dendrogram and the module colors underneath
-plotDendroAndColors(net$dendrograms[[1]], mergedColors[net$blockGenes[[1]]],
-                    "Module colors",
-                    dendroLabels = FALSE, hang = 0.03,
-                    addGuide = TRUE, guideHang = 0.05)
-
-eigen <- net$MEs
-
-pheatmap(t(net$MEs), labels_col = sdat$group[match(rownames(net$MEs), rownames(sdat))])
-```
-
-
-```{r DEpcoa, eval = FALSE}
-##### PCoA with only DE genes
-
-# Get only genes that are DE across all colonies
-DEgenes <- DE %>% 
-  filter(colony == "all") %>%
-  unnest(sig) %>%
-  distinct(gene)
-
-# Get variance stabilized counts for DE genes
-DEvsd <- vsd[DEgenes$gene, ]
-# Remove 'batch' effect of colony
-assay(DEvsd) <- limma::removeBatchEffect(assay(DEvsd), DEvsd$colony)
-
-## Calculate distances among samples
-DEsampleDists <- dist(t(assay(DEvsd)), method = "euclidean")
-DEsampleDistMatrix <- as.matrix(DEsampleDists)
-
-## Calculate MDS
-DEmds <- as.data.frame(colData(DEvsd)) %>% cbind(cmdscale(DEsampleDistMatrix))
-
-# Calculate group centroids for plotting
-DEmds <- DEmds %>%
-  group_by(sym, trt2) %>%
-  summarise(c1 = mean(`1`), c2 = mean(`2`)) %>%    
-  full_join(DEmds)
-
-# Plot with spiders
-DEpcoa <- ggplot(DEmds, aes(color = sym:trt2)) +
-  geom_segment(mapping = aes(x = `1`, y = `2`, xend = c1, yend = c2),
-               lwd = 0.25, col = "grey") +
-  geom_point(aes(x = c1, y = c2), size = 5, alpha = 1) +
-  geom_point(aes(x = `1`, y = `2`), alpha = 1) +
-  labs(x = "PC1", y = "PC2")
-
-DEpcoa # + geom_text(aes(x = `1`, y = `2`, label = paste(colony, core)))
-```
-
-```{r, eval = FALSE}
-# DA Loadings
-### Find genes that load highly along axis 1 -- the one associated with general heat stress and presence of D
-contrib <- loadingplot(dp1$var.contr, axis=1, thres=.003, lab.jitter=1)
-### Plot counts of those genes
-plotCounts(hs.dds, gene = "Mcavernosa19950", intgroup = c("group"))
-
-plotCounts(hs.dds, gene = "Mcavernosa19950", intgroup = c("group"), returnData = TRUE)
-
-
-
-
-### Find genes that load highly along axis 2 -- the one associated with unique heat response of C vs. D
-contrib <- loadingplot(dp1$var.contr, axis=2, thres=.003, lab.jitter=1)
-### Plot counts of those genes
-plotCounts(hs.dds, gene = "Mcavernosa05569", intgroup = c("group"))
-plotCounts(hs.dds, gene = "Mcavernosa18398", intgroup = c("group"))
-plotCounts(hs.dds, gene = "Mcavernosa25590", intgroup = c("group"))
-plotCounts(hs.dds, gene = "Mcavernosa21308", intgroup = c("group"))
-```
-
-
-```{r, eval = FALSE, include = FALSE}
-# correlation of all genes expression across groups
-# all <- as.list(rownames(hs.dds)) %>%
-#   future_map(~ plotCounts(hs.dds, gene = .x, intgroup = "group", returnData = TRUE))
-
-all <- data.frame(assay(vsd)) %>%
-  rownames_to_column("gene") %>%
-  gather(sample, vst, -gene) %>%
-  mutate(group = colData(vsd)[match(sample, rownames(colData(vsd))), "group"]) %>%
-  group_by(group, gene) %>%
-  summarise(meanvst = mean(log(vst))) %>%
-  spread(group, meanvst)
-
-ggplot(all, aes(x = Cc, y = Dc)) + geom_point()
+ggsave(noshuffpcoa, file = "figures/FigS4.png", width = 120, height = 90, units = "mm")
 ```
