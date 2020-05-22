@@ -359,6 +359,7 @@ dat <- data.frame(vsd2)
 dp1 <- dapc(t(dat), colData(hs.dds)$group,
             n.pca = 15, n.da = 2)   # Retain 15 PCs and 2 discriminant functions
 #scatter(dp1,bg="white",scree.da=TRUE,scree.pca=TRUE,legend=TRUE,solid=.4) 
+varexpl <- round((dp1$eig/sum(dp1$eig))[1:2] * 100, 1)
 
 # Axis one represents general heat stress response, and effect of D under control moving toward this transcriptional state.  Axis two represents the *different/unique* heat stress responses of C vs. D corals.
 
@@ -373,7 +374,6 @@ dapc <- dapc %>%
   summarize(c1 = mean(LD1),
             c2 = mean(LD2)) %>%
   full_join(dapc)
-ggplot(dapc, aes(x = LD1, y = LD2, color = grp)) + geom_point()
 
 # Plot with spiders
 dapc.fig <- 
@@ -386,7 +386,7 @@ dapc.fig <-
   scale_fill_manual(name = "temp", labels = c("control", "heated"), values = c("black", "white")) +
   guides(fill = guide_legend(override.aes = list(shape = 21, size = 2))) +
   guides(shape = guide_legend(override.aes = list(fill = "black", size = 2))) +
-  labs(x = "LD1", y = "LD2") +
+  labs(x = paste0("LD1 [", varexpl[1],"%]"), y = paste0("LD2 [", varexpl[2],"%]")) +
   theme_custom() +
   #theme(legend.position = c(0.25, 0.15)) +
   theme(plot.margin = margin(t = 0, r = 0.9, unit = "cm")) +
@@ -894,7 +894,7 @@ KOGheatmap <- function(deltaranks, pvals, ...) {
   myBreaks <- c(seq(min(deltaranks), 0, length.out = ceiling(paletteLength/2) + 1), 
                 seq(max(deltaranks)/paletteLength, max(deltaranks), 
                     length.out = floor(paletteLength/2)))
-  pheatmap(mat = deltaranks, display_numbers = pvals,
+  pheatmap(mat = deltaranks, display_numbers = pvals, fontsize_number = 8,
            cluster_cols = FALSE, cluster_rows = FALSE,
            treeheight_row = 15, treeheight_col = 15,
            border_color = "white", scale = "none",
@@ -971,7 +971,7 @@ kogout %>%
   write_tsv("output/kogout.txt")
 ```
 
-Test similarity of transcriptome responses to different conditions by correlation of KOG delta-ranks
+## Correlation of KOG delta-ranks: testing similarity of transcriptome responses
 ```{r KOG_correlations}
 # Visualize KOG response correlations between different contrasts
 GGally::ggpairs(kogtable2, lower = list(continuous = "smooth"), diag = NULL)
@@ -1020,7 +1020,8 @@ ggsave(plot = last_plot(), filename = "figures/fig4b.png", width = 80, height = 
 # Combine KOG heatmap with KOG correlations into multi-panel figure
 grob4a = grid::grid.grabExpr(grid::grid.draw(fig4a)) 
 
-fig4 <- plot_grid(NULL, grob4a, fig4b, rel_widths = c(0.025, 0.685, 0.29), nrow = 1, labels = c("A", "", "B"))
+fig4 <- plot_grid(NULL, grob4a, fig4b, rel_widths = c(0.025, 0.685, 0.29), 
+                  nrow = 1, labels = c("A", "", "B"))
 
 ggsave(plot = fig4, filename = "figures/fig4.png", width = 169, height = 90, units = "mm")
 ```
