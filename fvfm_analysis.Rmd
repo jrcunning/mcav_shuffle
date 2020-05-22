@@ -57,14 +57,16 @@ ggplot(pam, aes(x = symtrt, y = Y)) +
 ```
 
 ```{r}
-pam <- filter(pam, colony %in% c(20, 22, 26))
+pam <- filter(pam, colony %in% c(20, 22, 26)) %>%
+  drop_na()
 
 # remove core that didn't shuffle
 pam <- filter(pam, !(colony == 22 & core == 12))
 
 
 mod <- lmer(Y ~ sym * trt + (1|colony), data = pam)
-mod2 <- lm(Y ~ sym * trt, data = pam)
+# Variance due to random effects (genet)
+varquant(mod)[[2]]
 
 lsm <- lsmeans(mod, specs = c("trt", "sym"))
 summary(lsm)
@@ -76,9 +78,10 @@ contrast(lsm, interaction = "pairwise", by = "trt")
 #  Change from ctrl to heat not diff by sym
 
 
-pamfig <- data.frame(summary(lsm)) %>%
-  mutate(trt = recode(trt, ctrl = "Control", heat = "Heated")) %>%
+pamfig <- tibble(summary(lsm)) %>%
+  #mutate(trt = recode(trt, ctrl = "Control", heat = "Heated")) %>%
   ggplot(aes(x = trt, y = lsmean, group = sym, shape = sym)) +
+  #geom_point(data = pam, position = position_dodge(width = 0.2), aes(y = Y, color = colony, fill = colony)) +
   geom_errorbar(aes(ymin = lsmean - SE, ymax = lsmean + SE),
                 position = position_dodge(width = 0.2), lwd = 0.15, width = 0.25) +
   geom_line(position = position_dodge(width = 0.2), lwd = 0.15) +

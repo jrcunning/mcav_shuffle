@@ -294,6 +294,6 @@ ggkog
 
 ```{r}
 ggout <- cowplot::plot_grid(ggdeg, ggkog, labels = "auto")
-ggsave(filename = "figures/random.png", width = 169, height = 80, units = "mm")
+ggsave(filename = "figures/FigS10.png", width = 169, height = 80, units = "mm")
 ```
 

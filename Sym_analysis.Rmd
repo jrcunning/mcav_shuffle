@@ -35,10 +35,42 @@ shuffnames <- c(
   `TRUE` = "Shuffling colonies",
   `FALSE` = "Non-shuffling colonies"
 )
+genetnames <- c(
+  `20` = "A",
+  `22` = "B",
+  `26` = "C"
+)
 global_labeller <- labeller(
   trt1 = trt1names,
-  shuff = shuffnames
+  shuff = shuffnames,
+  colony = genetnames
 )
+```
+
+```{r}
+# Define function to quantify variance due to fixed and random effects
+# Based on code from Quigley et al.: https://datadryad.org/stash/dataset/doi:10.5061/dryad.8b5g6 
+varquant <- function(mod) {
+  X.var<- var(as.vector(lme4::fixef(mod) %*% t(mod@pp$X)))
+  ## Extract the variance components for the random effects (not including the residuals)
+  Z.var <- sum(
+    sapply(
+      VarCorr(mod)[!sapply(unique(unlist(strsplit(names(ranef(mod)),":|/"))), function(l)
+        length(unique(mod@frame[,l])) == nrow(mod@frame))],
+      function(Sigma) {
+        X <- model.matrix(mod)
+        Z <- X[,rownames(Sigma)]
+        sum(diag(Z %*% Sigma %*% t(Z)))/nrow(X) } ) )
+  ## Extract the variance componts for the residuals
+  R.var <- attr(lme4::VarCorr(mod), "sc")^2
+  ## The marginal R2 (proportion of variance due to fixed effects)
+  R2.marginal <- X.var/(X.var+Z.var+R.var)
+  # 16 % of variance due to fixed effects: no fixed effects
+  ## The proportion of variance due to random effects
+  R2.random <- Z.var/(X.var+Z.var+R.var)
+  return(list(R2.marginal, R2.random))
+}
+
 ```
 
 # Load sample metadata
@@ -90,19 +122,18 @@ df <- full_join(sdat, qpcr) %>%
   arrange(sym, trt) %>%
   filter(!is.na(trt1))
 
-df %>%
-  dplyr::group_by(trt1, colony %in% c(20, 22, 26)) %>%
-  dplyr::summarize(mean_propD = mean(propD, na.rm = T)) %>%
-  knitr::kable()
-
-df %>%
-  filter(colony %in% c(20, 22, 26)) %>%
-  arrange(trt1, propD)
-#22-12
+# df %>%
+#   dplyr::group_by(trt1, colony %in% c(20, 22, 26)) %>%
+#   dplyr::summarize(mean_propD = mean(propD, na.rm = T)) %>%
+#   knitr::kable()
+# 
+# df %>%
+#   filter(colony %in% c(20, 22, 26)) %>%
+#   arrange(trt1, propD)
+# #22-12
 
 # Look at duplicates/reruns
 dups <- df %>% dplyr::count(cc = interaction(colony, core)) %>% filter(n >= 2)
-df %>% filter(interaction(colony, core) %in% dups$cc)
 
 # Choose run with lowest mean sd for C and D
 selected <- df %>%
@@ -117,9 +148,9 @@ df <- df %>%
   filter(!interaction(colony, core) %in% dups$cc) %>%
   bind_rows(selected)
 
-df %>%
-  filter(colony %in% c(20, 22, 26)) %>%
-  arrange(trt1, propD)
+# df %>%
+#   filter(colony %in% c(20, 22, 26)) %>%
+#   arrange(trt1, propD)
 
 
 # Plot with names
@@ -135,7 +166,9 @@ ggplot(df, aes(x = trt1, y = propD, color = trt1), labeller = global_labeller) +
 
 22-12 should have shuffled and did NOT
 28-40 shuffled when it should NOT
+
 ```{r}
+# Exclude these cores from analysis
 df <- df %>%
   filter(!(colony == 22 & core == 12),
          !(colony == 28 & core == 40))
@@ -148,9 +181,9 @@ df <- df %>%
 ```{r}
 # Calculate means and confidence intervals of proportion Durusdinium for all groups of interest
 dd <- tibble(data = list(
-  control.3 = filter(df, colony %in% c(20, 22, 26), trt1 == "c"),
-  bl.recov.3 = filter(df, colony %in% c(20, 22, 26), trt1 == "b"),
-  bl.recov.others = filter(df, !colony %in% c(20, 22, 26))
+  all.control = filter(df, colony %in% c(20, 22, 26), trt1 == "c"),
+  genets.shuffled = filter(df, colony %in% c(20, 22, 26), trt1 == "b"),
+  genets.not.shuffled = filter(df, !colony %in% c(20, 22, 26))
 )) %>%
   mutate(grp = names(data), n = map_dbl(data, ~ nrow(.)))
 
@@ -185,13 +218,13 @@ propdfig <- ggplot(df1, aes(x = trt1, y = propD, color = trt1), labeller = globa
   theme(legend.position = 0)
 
 propdfig
-ggsave(filename = "figures/FigS1.png", plot = propdfig)
+ggsave(filename = "figures/FigS2.png", plot = propdfig, width = 85, height = 100, units = "mm")
 
 # Only shuffling colonies --- panel A in Figure 1
 propdfig <- df1 %>% 
   filter(shuff) %>%
   ggplot(aes(x = trt1, y = propD, shape = trt1), labeller = global_labeller) +
-  geom_jitter(width = 0.25, alpha = 0.5, size = 2.5) +
+  geom_jitter(width = 0.25, alpha = 0.6, size = 2.5) +
   scale_shape_manual(values = c(21, 24)) +
   labs(x = "", y = expression(paste("Proportion ", italic("Durusdinium")))) +
   theme_custom() +
@@ -203,12 +236,12 @@ save(propdfig, file = "output/propdfig.RData")
 ```
 
 
-## Total S/H ratio -- for only colonies in hs exp
+## Total S/H ratio -- for only colonies in short term heat stress exp
 ```{r}
-df1 %>%
-  ggplot(aes(x = interaction(sym, trt), y = log(totSH))) +
-  geom_boxplot() +
-  geom_point(aes(color = colony))
+# df1 %>%
+#   ggplot(aes(x = interaction(sym, trt), y = log(totSH))) +
+#   geom_boxplot() +
+#   geom_point(aes(color = colony))
 
 dff <- df1 %>%
   filter(colony %in% c(20, 22, 26)) %>%
@@ -216,19 +249,23 @@ dff <- df1 %>%
 
 mod <- lmer(log10(totSH) ~ sym * trt + (1|colony), data = dff)
 
+# Proportion of variance due to random effects (genet)
+varquant(mod)[[2]]
+
 lsm <- lsmeans(mod, specs = c("sym", "trt"))
+lsmeans(mod, specs = c("sym", "trt"), type = "response")
 
 rbind(contrast(lsm, "pairwise"))[c(1,2,5)]
 contrast(lsm, interaction = "pairwise")
 
-mod2 <- lmer(log10(totSH) ~ sym + trt + (1|colony), data = dff)
+#mod2 <- lmer(log10(totSH) ~ sym + trt + (1|colony), data = dff)
 
-lsm <- lsmeans(mod2, specs = c("sym"))
-contrast(lsm, "pairwise")
-lsm <- lsmeans(mod2, specs = c("trt"))
-contrast(lsm, "pairwise")
+#lsm <- lsmeans(mod2, specs = c("sym"))
+#contrast(lsm, "pairwise")
+#lsm <- lsmeans(mod2, specs = c("trt"))
+#contrast(lsm, "pairwise")
 
-totshfig <- data.frame(summary(lsm)) %>%
+totshfig <- tibble(summary(lsm)) %>%
   mutate(trt = recode(trt, ctrl = "Control", heat = "Heated")) %>%
   ggplot(aes(x = trt, y = lsmean, group = sym, shape = sym)) +
   geom_errorbar(aes(ymin = lsmean - SE, ymax = lsmean + SE),
@@ -252,7 +289,8 @@ data.frame(summary(lsm, type = "response")) %>%
 # Combined fig
 ```{r}
 load("output/pamfig.RData")
-fig1 <- cowplot::plot_grid(propdfig, pamfig, totshfig, nrow = 1, rel_widths = c(0.33, 0.33, 0.33), labels = "AUTO")
+fig1 <- cowplot::plot_grid(propdfig, pamfig, totshfig, nrow = 1, 
+                           rel_widths = c(0.33, 0.33, 0.33), labels = "AUTO")
 ggsave(filename = "figures/fig1.png", fig1, width = 169, height = 84.5, units = "mm")
 
 fig1
