@@ -296,12 +296,15 @@ plotVarPart(all$vp[[3]])
 rowSums(assay(all$vsd[[3]]))
 mean(all$vp[[3]]$sym)
 weighted.mean(all$vp[[3]]$sym, w = rowSums(assay(all$vsd[[3]])))
+
+varsum <- colSums(all$vp[[3]])
+varsum[1] / sum(varsum)
 ```
 
 Plot sources of variance for each colony
 ```{r plot_varpart, eval = FALSE}
 varpartfig <- allsumm %>% 
-  unnest(vpsum, .drop = T) %>%
+  unnest_legacy(vpsum, .drop = T) %>%
   gather(source, value, -colony) %>%
   group_by(colony) %>%
   mutate(relvar = value / sum(value)) %>%   # TOTAL VARIANCE NOT SAME FOR EACH COLONY -- NORMALIZE WITHIN COLONY
