@@ -241,8 +241,6 @@ pcoa <- ggplot(mds, aes(color = genet, shape = sym)) +
   theme(legend.spacing.y = unit(0, "cm"))
 
 pcoa
-
-ggsave(filename = "output/pcoa.png", pcoa, width = 109, height = 84.5, units = "mm")
 ```
 
 The PCoA shows that global gene expression varies significantly by colony along PC2. Within colonies 20 (red) and 26 (blue), samples cluster mostly by symbiont type along PC1, with less (but still some) separation between control corals and heated corals along both PC1 and/or PC2. Colony 26 shows the most pronounced differences between corals with C and corals with D along PC1. Interestingly, the effects of symbiont type on colonies 20 and 26 are in opposite directions along PC1. Conversely, samples of colony 26 separate mostly by heat treatment, with little to no effect of symbiont on global gene expression. This suggests each colony is responding differently to symbiont and heat treatments.
@@ -320,9 +318,6 @@ varpartfig <- allsumm %>%
 
 varpartfig
 
-save(varpartfig, file = "output/varpartfig.RData")
-
-ggsave(filename = "output/varpart.png", plot = varpartfig, width = 69, height = 84.5, units = "mm")
 
 fig2 <- cowplot::plot_grid(pcoa, varpartfig, rel_widths = c(2, 1), labels = "AUTO")
 ggsave(filename = "figures/fig2.png", fig2, width = 169, height = 84.5, units = "mm")
@@ -495,7 +490,6 @@ dek <- DEtab %>% select(3:6) %>%
   knitr::kable(format = "markdown", caption = "Number of differentially expressed genes within individual genets and across all genets for each specified contrast. DEGs identified using DESeq with an adjusted p-value < 0.1. In brackets are the numbers of significantly up- and down-regulated genes.")
 
 dek
-#save_kable(dek, file = "output/Table1.html")
 ```
 
 

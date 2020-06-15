@@ -231,8 +231,6 @@ propdfig <- df1 %>%
   theme(legend.position = 0)
 
 propdfig
-
-save(propdfig, file = "output/propdfig.RData")
 ```
 
 
@@ -277,8 +275,6 @@ totshfig <- tibble(summary(lsm)) %>%
   theme_custom() +
   theme(legend.position = c(0.8, 0.9), legend.title = element_blank())
 totshfig
-
-save(totshfig, file = "output/totshfig.RData")
 
 data.frame(summary(lsm, type = "response")) %>%
   select(sym, trt, response) %>%

@@ -1,0 +1,16 @@
+contrast	genes	term	delta.rank	padj
+Dh.Dc	8/231	Translation, ribosomal structure and biogenesis	-336	6.42e-4
+Dc.Cc	17/231	Translation, ribosomal structure and biogenesis	486	2.97e-8
+Dc.Cc	10/140	Lipid transport and metabolism	-313	0.0241
+Dc.Cc	5/72	Extracellular structures	-387	0.0405
+Dc.Cc	4/140	Replication, recombination and repair	-274	0.0405
+Dc.Cc	22/326	Intracellular trafficking, secretion, and vesicular transport	171	0.0574
+Dc.Cc	10/154	Carbohydrate transport and metabolism	-217	0.0991
+Ch.Cc	12/231	Translation, ribosomal structure and biogenesis	355	2.15e-4
+Ch.Cc	13/144	Inorganic ion transport and metabolism	-412	4.66e-4
+Ch.Cc	6/72	Extracellular structures	-499	0.00299
+Ch.Cc	12/140	Lipid transport and metabolism	-332	0.00644
+Ch.Cc	6/154	Carbohydrate transport and metabolism	-299	0.00969
+Ch.Cc	14/238	RNA processing and modification	192	0.0571
+Ch.Cc	44/609	Posttranslational modification, protein turnover, chaperones	123	0.0601
+Ch.Cc	6/30	Coenzyme transport and metabolism	-497	0.0627
