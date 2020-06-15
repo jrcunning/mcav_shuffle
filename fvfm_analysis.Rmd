@@ -28,6 +28,32 @@ theme_custom <- function() {
 ```
 
 ```{r}
+# Define function to quantify variance due to fixed and random effects
+# Based on code from Quigley et al.: https://datadryad.org/stash/dataset/doi:10.5061/dryad.8b5g6 
+varquant <- function(mod) {
+  X.var<- var(as.vector(lme4::fixef(mod) %*% t(mod@pp$X)))
+  ## Extract the variance components for the random effects (not including the residuals)
+  Z.var <- sum(
+    sapply(
+      VarCorr(mod)[!sapply(unique(unlist(strsplit(names(ranef(mod)),":|/"))), function(l)
+        length(unique(mod@frame[,l])) == nrow(mod@frame))],
+      function(Sigma) {
+        X <- model.matrix(mod)
+        Z <- X[,rownames(Sigma)]
+        sum(diag(Z %*% Sigma %*% t(Z)))/nrow(X) } ) )
+  ## Extract the variance componts for the residuals
+  R.var <- attr(lme4::VarCorr(mod), "sc")^2
+  ## The marginal R2 (proportion of variance due to fixed effects)
+  R2.marginal <- X.var/(X.var+Z.var+R.var)
+  # 16 % of variance due to fixed effects: no fixed effects
+  ## The proportion of variance due to random effects
+  R2.random <- Z.var/(X.var+Z.var+R.var)
+  return(list(R2.marginal, R2.random))
+}
+
+```
+
+```{r}
 # Import sample metadata
 sdat <- read_xlsx("data/sample_metadata.xlsx") %>%
   mutate(sample = paste0(species, colony, ".", core),
