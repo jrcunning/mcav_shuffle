@@ -284,10 +284,14 @@ weighted.mean(all$vp[[3]]$sym, w = rowSums(assay(all$vsd[[3]])))
 
 varsum <- colSums(all$vp[[3]])
 varsum[1] / sum(varsum)
+
+save(allsumm, file = "output/varpartsumm.RData")
 ```
 
 Plot sources of variance for each colony
 ```{r plot_varpart, eval = FALSE}
+#load(file = "output/varpartsumm.RData")
+
 varpartfig <- allsumm %>% 
   unnest_legacy(vpsum, .drop = T) %>%
   gather(source, value, -colony) %>%
