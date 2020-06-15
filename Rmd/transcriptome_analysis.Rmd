@@ -155,15 +155,6 @@ rps <- qplot(colSums(counts(dds))) +
   labs(x = "Mapped reads per sample", y = "Number of samples",
        title = "Mapped reads per sample") +
   geom_label(aes(x = 6e5, y = 13, label = paste(nsamples, "samples")))
-# Sample Mc20-05 has far more counts than others -- may need to rarefy this sample down to median count?
-
-# Number of reads per colony
-# count_summ %>%
-#   filter(stage == "mapped", colony %in% c(20,22, 26)) %>%
-#   group_by(colony) %>%
-#   ggplot(aes(x = colony, y = count)) +
-#   geom_boxplot() +
-#   ylim(0, 300000)
 
 # Number of genes
 ngenes <- nrow(counts(dds))
@@ -186,10 +177,6 @@ ggsave(countfig, filename = "figures/FigS3.png", device = "png", width = 150, he
 ```{r prefilter_dds}
 # Filter out sample that did not shuffle -- Mc22.12 (17th sample in hs.dds)
 hs.dds <- hs.dds[, -17]
-
-######
-## testing andrew's suggestion of removing three co-dominant C/D samples: 20-12(3), 26-07(25), 20-01(1))
-#hs.dds <- hs.dds[, -c(1,3,25)]
 
 # Remove genes with less than 1 mean count across samples
 hs.dds <- hs.dds[ rowMeans(counts(hs.dds)) > 1, ]
