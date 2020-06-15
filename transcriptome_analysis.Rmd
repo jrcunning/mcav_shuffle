@@ -71,7 +71,7 @@ global_labeller <- labeller(
 #### Gene count data
 ```{r import_counts}
 # Import gene expression / count data
-counts <- read.table("data/tagseq/processed/counts_newpars.txt", 
+counts <- read.table("data/tagseq/processed/counts.txt", 
                      header = TRUE, row.names = 1)
 # Trim column names to just the sample name
 colnames(counts) <- str_sub(colnames(counts), 1, 7)
@@ -125,7 +125,7 @@ colData(hs.dds) <- droplevels(colData(hs.dds))
 ### Summarize count data
 ```{r summarize_counts, fig.height = 4, fig.width = 10}
 # Read in count totals of raw, postQC, and mapped reads
-count_summ <- read.table("data/tagseq/processed/count_totals_newpars.txt") %>%
+count_summ <- read.table("data/tagseq/processed/count_totals.txt") %>%
   mutate(sample_id = str_sub(V1, 3, 7),
          raw = V2, post_qc = V4, mapped = V6) %>%
   select(sample_id, raw, post_qc, mapped) %>%

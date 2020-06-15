@@ -47,7 +47,7 @@ samcount_launch_bt2.pl '\.sam$' ../../genome/Mcav_transcript_geneID.txt > sc
 parallel :::: sc
 
 ## assembling all counts into a single table:
-expression_compiler.pl *.sam.counts > ../processed/counts_newpars.txt
+expression_compiler.pl *.sam.counts > ../processed/counts.txt
 
 
 
@@ -68,7 +68,7 @@ for i in *.sam.counts; do
 done
 
 # join all together
-paste <(sort rawreads2.txt) <(sort postQCreads2.txt) <(sort mappedreads.txt) > ../processed/count_totals_newpars.txt
+paste <(sort rawreads2.txt) <(sort postQCreads2.txt) <(sort mappedreads.txt) > ../processed/count_totals.txt
 
 # delete all files in the intermediate directory
 rm *
