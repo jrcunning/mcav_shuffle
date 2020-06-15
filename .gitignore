@@ -4,8 +4,7 @@ data/genome/~$*
 
 data/tagseq/raw/*
 data/tagseq/intermediate/*
-data/16S/raw/*
-data/16S/intermediate/*
+data/16S/*
 data/temperature
 
 data/tagseq/NCBI_BioSample.xlsx
