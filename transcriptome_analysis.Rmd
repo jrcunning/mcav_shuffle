@@ -82,7 +82,7 @@ counts <- counts[, order(colnames(counts))]
 #### Sample metadata
 ```{r sample_metadata}
 # Import sample metadata
-sdat0 <- read_xlsx("data/sample_metadata.xlsx") %>%
+sdat0 <- read_csv("data/sample_metadata.csv") %>%
   mutate(sym = recode(trt1, b = "D", c = "C"),
          sample = paste0(species, colony, ".", core),
          group = paste(sym, trt2, sep = ""),

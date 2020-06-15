@@ -55,7 +55,7 @@ varquant <- function(mod) {
 
 ```{r}
 # Import sample metadata
-sdat <- read_xlsx("data/sample_metadata.xlsx") %>%
+sdat <- read_csv("data/sample_metadata.csv") %>%
   mutate(sample = paste0(species, colony, ".", core),
          sym = if_else(trt1 == "c", "C", "D"),     # recode treatment names
          trt = if_else(trt2 == "h", "heat", "ctrl"),
