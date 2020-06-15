@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/182449694.svg)](https://zenodo.org/badge/latestdoi/182449694)
+
 This repository includes all data and analysis to accompany the manuscript:
 
 ## Thermotolerant coral symbionts modulate heat stress-responsive genes in their hosts  
