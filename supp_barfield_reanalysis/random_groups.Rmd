@@ -19,6 +19,21 @@ library(readxl)
 library(pheatmap)
 library(RColorBrewer)
 library(furrr)
+
+## ggplot theme
+theme_custom <- function() {
+  theme_bw(base_size = 10) %+replace%    #, base_family = "Arial"
+    theme(
+      panel.grid.major = element_blank(), 
+      panel.grid.minor = element_blank(), 
+      panel.background = element_blank(),
+      panel.border = element_rect(color = "black", fill = NA),
+      legend.background = element_rect(fill = NA, colour = NA),
+      axis.text.x = element_text(angle=45, hjust=1, vjust = 1)#,
+      #legend.title = element_text(size = 8), 
+      #legend.text = element_text(size = 7)
+    )
+}
 ```
 
 ## Import data and run DESeq analysis
@@ -27,7 +42,7 @@ This code chunk imports the gene count data and performs filtering and grouping 
 
 ```{r}
 # Import gene expression / count data
-counts <- read.table("supp_analysis_barfield/allcounts_millepora.txt", header = TRUE, row.names = 1)
+counts <- read.table("supp_barfield_reanalysis/allcounts_millepora.txt", header = TRUE, row.names = 1)
 #shorten names
 names(counts)= sub(".sam.counts", "", names(counts))
 
@@ -119,20 +134,26 @@ df <- tibble(
 
 ```{r}
 # Calc means of random and non-random groupings
-means <- df %>%
+meds <- df %>%
   group_by(random = grepl("rand", combos)) %>%
-  summarise(mean = mean(ndegs))
+  summarise(med = median(ndegs))
+
+min(df$ndegs)
 
 # Plot histogram
-ggplot(df, aes(x = ndegs, fill = ifelse(combos == "C vs D", "C vs D", "random groups"))) +
+ggplot(df, aes(x = ndegs)) +
   geom_histogram() +
   theme(legend.title = element_blank()) +
-  labs(x = "Number of DEGs", "Number of groups of 5 vs. 4 colonies") +
+  labs(x = "Number of DEGs", y = "Number of permutations of 5 vs. 4 colonies") +
   xlim(0, 2300) +
-  geom_text(data = means, aes(x = mean, y = -1, color = random, fill = random, label = round(mean, 0))) +
+  theme_custom() +
+  geom_vline(xintercept = meds$med, lty = 2) +
+  annotate("text", x = meds$med[2]+10, y = 25, label = paste0("Median: ", meds$med[2]), hjust = 0, size = 3) +
+  annotate("text", x = meds$med[1]-10, y = 22.5, label = paste0("Actual DEGs: ", meds$med[1]), hjust = 1, size = 3) +
+  #annotate("text", x = meds$med[2]-0.5, y = 120, label = paste0("p=", round(kog.out$p, 4)), hjust = 1, size = 2) +
   theme(legend.position = "none")
 
-ggsave(filename = "figures/FigS6.png")
+ggsave(filename = "figures/FigS11.png", width = 150, height = 120, units = "mm")
 
 
 
