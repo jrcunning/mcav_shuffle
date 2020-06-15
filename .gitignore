@@ -1,10 +1,16 @@
 .DS_Store
 .Rproj.user/
+data/genome/~$*
 
 data/tagseq/raw/*
 data/tagseq/intermediate/*
 data/16S/raw/*
 data/16S/intermediate/*
+data/temperature
+
+data/tagseq/NCBI_BioSample.xlsx
+
+archived_files
 
 data/SILVA_132_QIIME_release
 
@@ -20,3 +26,4 @@ code/GO_MWU/dissim*
 *_cache
 data/photos
 
+manuscript
