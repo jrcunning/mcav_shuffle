@@ -1,4 +1,4 @@
-[![DOI](https://zenodo.org/badge/182449694.svg)](https://zenodo.org/badge/latestdoi/182449694)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.3895128.svg)](https://doi.org/10.5281/zenodo.3895128)
 
 This repository includes all data and analysis to accompany the manuscript:
 
